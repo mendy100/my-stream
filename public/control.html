@@ -260,6 +260,18 @@
     width: auto;
   }
   .wifi-form-row button:active { background: #4338ca; }
+  .wifi-show-pass {
+    background: none;
+    border: 2px solid #ddd;
+    border-radius: 10px;
+    padding: 0.55rem 0.6rem;
+    font-size: 0.9rem;
+    cursor: pointer;
+    color: #888;
+    width: auto;
+    flex-shrink: 0;
+  }
+  .wifi-show-pass:active { background: #f0f2ff; }
 
   .scan-btn {
     background: none;
@@ -353,6 +365,7 @@
     <label id="wifi-connect-label">Connect to network</label>
     <div class="wifi-form-row">
       <input type="password" id="wifi-connect-pass" placeholder="Password">
+      <button class="wifi-show-pass" id="wifi-show-pass">👁</button>
       <button id="wifi-connect-btn">Connect</button>
     </div>
   </div>
@@ -656,6 +669,12 @@
       return false;
     }
   }
+
+  document.getElementById('wifi-show-pass').addEventListener('click', () => {
+    const isPass = wifiConnectPass.type === 'password';
+    wifiConnectPass.type = isPass ? 'text' : 'password';
+    document.getElementById('wifi-show-pass').textContent = isPass ? '🙈' : '👁';
+  });
 
   wifiConnectBtn.addEventListener('click', async () => {
     if (!selectedSsid) return;

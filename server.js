@@ -83,8 +83,8 @@ app.get('/api/wifi/scan', (req, res) => {
   let replied = false;
   const timeout = setTimeout(() => {
     if (!replied) { replied = true; res.json({ networks: [], error: 'Scan timed out' }); }
-  }, 20000);
-  piSocket.timeout(15000).emit('scan-wifi', null, (err, result) => {
+  }, 35000);
+  piSocket.timeout(30000).emit('scan-wifi', null, (err, result) => {
     clearTimeout(timeout);
     if (replied) return;
     replied = true;
