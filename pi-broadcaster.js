@@ -137,15 +137,18 @@ function scanWifiNetworks() {
     execSync('sudo nmcli device wifi rescan 2>/dev/null', { encoding: 'utf8', timeout: 10000 });
   } catch (e) {}
   try {
-    const out = execSync('nmcli -t -f SSID,SIGNAL,SECURITY device wifi list', { encoding: 'utf8', timeout: 10000 });
+    const out = execSync('nmcli -f SSID,SIGNAL,SECURITY device wifi list', { encoding: 'utf8', timeout: 10000 });
     const seen = new Set();
     const networks = [];
-    for (const line of out.trim().split('\n')) {
-      const parts = line.split(':');
-      const ssid = parts[0];
-      if (!ssid || seen.has(ssid)) continue;
+    const lines = out.trim().split('\n');
+    for (let i = 1; i < lines.length; i++) {
+      const line = lines[i];
+      const ssid = line.substring(0, 33).trim();
+      const signal = parseInt(line.substring(33, 41).trim()) || 0;
+      const security = line.substring(41).trim() || 'Open';
+      if (!ssid || ssid === '--' || seen.has(ssid)) continue;
       seen.add(ssid);
-      networks.push({ ssid, signal: parseInt(parts[1]) || 0, security: parts[2] || 'Open' });
+      networks.push({ ssid, signal, security });
     }
     networks.sort((a, b) => b.signal - a.signal);
     return { networks };
