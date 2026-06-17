@@ -12,6 +12,27 @@ app.use(express.static(path.join(__dirname, 'public')));
 
 const BROADCAST_KEY = process.env.BROADCAST_KEY || 'LgPDW26rae8w';
 
+const branding = {
+  name: 'Live Stream',
+  subtitle: 'Tap play to start listening',
+  logoUrl: '',
+  primaryColor: '#6366f1',
+  accentColor: '#8b5cf6',
+  bgStyle: 'gradient1',
+  cardStyle: 'shadow',
+  font: 'modern',
+  showLiveBadge: true,
+  offlineMessage: 'Stream is currently offline',
+  buttonShape: 'circle',
+  footerText: '',
+};
+
+app.get('/api/branding', (req, res) => res.json(branding));
+app.post('/api/branding', (req, res) => {
+  Object.assign(branding, req.body);
+  res.json(branding);
+});
+
 const state = {
   isLive: false,
   listenerCount: 0,

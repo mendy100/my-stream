@@ -8,133 +8,101 @@
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body {
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-    background: linear-gradient(135deg, #f0f2ff 0%, #e8f4f8 50%, #fef3f0 100%);
+    font-family: var(--font);
+    background: var(--bg);
     color: #1a1a2e;
     min-height: 100vh;
     display: flex;
     align-items: center;
     justify-content: center;
     padding: 1.5rem;
+    --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    --bg: linear-gradient(135deg, #f0f2ff 0%, #e8f4f8 50%, #fef3f0 100%);
+    --primary: #6366f1;
+    --accent: #8b5cf6;
   }
-  .container {
-    text-align: center;
-    max-width: 420px;
-    width: 100%;
-  }
+  .container { text-align: center; max-width: 420px; width: 100%; }
   .logo {
-    width: 80px;
-    height: 80px;
+    width: 80px; height: 80px;
     border-radius: 24px;
-    background: linear-gradient(135deg, #6366f1, #8b5cf6);
+    background: linear-gradient(135deg, var(--primary), var(--accent));
     margin: 0 auto 1.2rem;
-    display: flex;
-    align-items: center;
-    justify-content: center;
+    display: flex; align-items: center; justify-content: center;
     box-shadow: 0 8px 30px rgba(99,102,241,0.25);
+    overflow: hidden;
   }
   .logo svg { width: 40px; height: 40px; fill: #fff; }
-  h1 {
-    font-size: 1.6rem;
-    font-weight: 800;
-    color: #2d2b55;
-    margin-bottom: 0.3rem;
-  }
-  .subtitle {
-    font-size: 0.85rem;
-    color: #888;
-    margin-bottom: 1.5rem;
-  }
+  .logo img { width: 100%; height: 100%; object-fit: cover; }
+  h1 { font-size: 1.6rem; font-weight: 800; color: #2d2b55; margin-bottom: 0.3rem; }
+  .subtitle { font-size: 0.85rem; color: #888; margin-bottom: 1.5rem; }
   .player-card {
     background: #fff;
     border-radius: 20px;
     padding: 1.5rem;
-    box-shadow: 0 4px 20px rgba(0,0,0,0.06);
   }
+  .player-card.shadow { box-shadow: 0 4px 20px rgba(0,0,0,0.06); }
+  .player-card.bordered { box-shadow: none; border: 2px solid #e5e7eb; }
+  .player-card.flat { box-shadow: none; }
   .status {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.4rem;
-    font-size: 0.75rem;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
-    margin-bottom: 1rem;
-    padding: 0.3rem 0.8rem;
-    border-radius: 20px;
-    background: #f0fdf4;
-    color: #16a34a;
+    display: inline-flex; align-items: center; gap: 0.4rem;
+    font-size: 0.75rem; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.06em; margin-bottom: 1rem;
+    padding: 0.3rem 0.8rem; border-radius: 20px;
+    background: #f0fdf4; color: #16a34a;
   }
   .status .dot {
-    width: 8px; height: 8px;
-    border-radius: 50%;
-    background: #22c55e;
-    animation: pulse 2s infinite;
+    width: 8px; height: 8px; border-radius: 50%;
+    background: #22c55e; animation: pulse 2s infinite;
   }
   .status.offline { background: #fef2f2; color: #dc2626; }
   .status.offline .dot { background: #ef4444; animation: none; }
-  @keyframes pulse {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.4; }
-  }
+  .status.hidden { display: none; }
+  @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
   .play-btn {
-    width: 72px;
-    height: 72px;
-    border-radius: 50%;
-    border: none;
-    background: linear-gradient(135deg, #6366f1, #8b5cf6);
-    color: #fff;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
+    width: 72px; height: 72px;
+    border: none; color: #fff; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
     margin: 0 auto 1rem;
+    background: linear-gradient(135deg, var(--primary), var(--accent));
     box-shadow: 0 6px 24px rgba(99,102,241,0.3);
     transition: transform 0.15s, box-shadow 0.15s;
   }
+  .play-btn.circle { border-radius: 50%; }
+  .play-btn.rounded { border-radius: 18px; }
+  .play-btn.pill { border-radius: 36px; width: 140px; }
   .play-btn:active { transform: scale(0.95); }
-  .play-btn:hover { box-shadow: 0 8px 32px rgba(99,102,241,0.4); }
   .play-btn svg { width: 28px; height: 28px; fill: #fff; }
   .play-btn.playing {
     background: linear-gradient(135deg, #ef4444, #dc2626);
     box-shadow: 0 6px 24px rgba(239,68,68,0.3);
   }
-  .play-label {
-    font-size: 0.8rem;
-    color: #999;
-    font-weight: 500;
-  }
-  .listeners-info {
-    margin-top: 1rem;
-    padding-top: 0.8rem;
-    border-top: 1px solid #f0f0f0;
-    font-size: 0.75rem;
-    color: #bbb;
-  }
-  .listeners-info span { color: #4f46e5; font-weight: 700; }
+  .play-label { font-size: 0.8rem; color: #999; font-weight: 500; }
+  .footer { margin-top: 1.5rem; font-size: 0.7rem; color: #bbb; }
+  .offline-msg { display: none; font-size: 0.85rem; color: #999; margin-top: 0.8rem; }
 </style>
 </head>
 <body>
 
 <div class="container">
-  <div class="logo">
+  <div class="logo" id="logo">
     <svg viewBox="0 0 24 24"><path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55C7.79 13 6 14.79 6 17s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/></svg>
   </div>
-  <h1>Live Stream</h1>
-  <p class="subtitle">Tap play to start listening</p>
+  <h1 id="stream-name">Live Stream</h1>
+  <p class="subtitle" id="subtitle">Tap play to start listening</p>
 
-  <div class="player-card">
+  <div class="player-card shadow" id="player-card">
     <div class="status" id="status">
       <div class="dot"></div>
       <span>Live</span>
     </div>
     <br>
-    <button class="play-btn" id="play-btn">
+    <button class="play-btn circle" id="play-btn">
       <svg id="play-icon" viewBox="0 0 24 24"><polygon points="6,3 20,12 6,21"/></svg>
     </button>
     <div class="play-label" id="play-label">Tap to play</div>
-    <div class="listeners-info"><span id="listener-count">0</span> listeners</div>
+    <div class="offline-msg" id="offline-msg">Stream is currently offline</div>
   </div>
+  <div class="footer" id="footer"></div>
 </div>
 
 <audio id="player" preload="none" src="/stream"></audio>
@@ -145,21 +113,63 @@
   const playBtn = document.getElementById('play-btn');
   const playIcon = document.getElementById('play-icon');
   const playLabel = document.getElementById('play-label');
-  const status = document.getElementById('status');
-  const listenerCount = document.getElementById('listener-count');
+  const statusEl = document.getElementById('status');
+  const offlineMsg = document.getElementById('offline-msg');
   let playing = false;
+  let isLive = false;
+
+  const FONTS = {
+    modern: "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+    classic: "Georgia, 'Times New Roman', serif",
+    rounded: "'Nunito', 'Quicksand', 'Comfortez', sans-serif",
+  };
+  const BGS = {
+    gradient1: 'linear-gradient(135deg, #f0f2ff 0%, #e8f4f8 50%, #fef3f0 100%)',
+    gradient2: 'linear-gradient(135deg, #fce4ec 0%, #f3e5f5 50%, #e8eaf6 100%)',
+    gradient3: 'linear-gradient(135deg, #e8f5e9 0%, #e0f7fa 50%, #fff3e0 100%)',
+    solid_white: '#ffffff',
+    solid_dark: '#1a1a2e',
+  };
+
+  fetch('/api/branding').then(r => r.json()).then(b => {
+    document.getElementById('stream-name').textContent = b.name || 'Live Stream';
+    document.getElementById('subtitle').textContent = b.subtitle || '';
+    document.getElementById('subtitle').style.display = b.subtitle ? '' : 'none';
+    if (b.logoUrl) {
+      document.getElementById('logo').innerHTML = '<img src="' + b.logoUrl + '" alt="Logo">';
+    }
+    document.documentElement.style.setProperty('--primary', b.primaryColor || '#6366f1');
+    document.documentElement.style.setProperty('--accent', b.accentColor || '#8b5cf6');
+    document.documentElement.style.setProperty('--bg', BGS[b.bgStyle] || BGS.gradient1);
+    document.documentElement.style.setProperty('--font', FONTS[b.font] || FONTS.modern);
+    if (b.bgStyle === 'solid_dark') {
+      document.body.style.color = '#e0e0e0';
+      document.getElementById('stream-name').style.color = '#fff';
+    }
+    document.getElementById('logo').style.background = 'linear-gradient(135deg, ' + (b.primaryColor||'#6366f1') + ', ' + (b.accentColor||'#8b5cf6') + ')';
+    const card = document.getElementById('player-card');
+    card.className = 'player-card ' + (b.cardStyle || 'shadow');
+    playBtn.className = 'play-btn ' + (b.buttonShape || 'circle');
+    if (!b.showLiveBadge) statusEl.classList.add('hidden');
+    offlineMsg.textContent = b.offlineMessage || 'Stream is currently offline';
+    document.getElementById('footer').textContent = b.footerText || '';
+    document.title = b.name || 'Live Stream';
+  }).catch(() => {});
 
   const socket = io({ query: { broadcaster: '0' } });
   socket.on('status', (s) => {
+    isLive = s.live;
     if (s.live) {
-      status.className = 'status';
-      status.querySelector('span').textContent = 'Live';
+      statusEl.className = statusEl.className.replace(' offline', '');
+      if (!statusEl.classList.contains('hidden')) statusEl.style.display = '';
+      statusEl.querySelector('span').textContent = 'Live';
+      offlineMsg.style.display = 'none';
     } else {
-      status.className = 'status offline';
-      status.querySelector('span').textContent = 'Offline';
+      statusEl.className += ' offline';
+      statusEl.querySelector('span').textContent = 'Offline';
+      offlineMsg.style.display = 'block';
     }
   });
-  socket.on('listeners', (n) => { listenerCount.textContent = n; });
 
   playBtn.addEventListener('click', () => {
     if (!playing) {
