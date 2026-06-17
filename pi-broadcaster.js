@@ -115,6 +115,18 @@ function getCurrentWifi() {
   return null;
 }
 
+function hasInternet() {
+  try {
+    execSync('ping -c 1 -W 3 1.1.1.1 2>/dev/null', { encoding: 'utf8', timeout: 5000 });
+    return true;
+  } catch (e) {}
+  try {
+    execSync('ping -c 1 -W 3 8.8.8.8 2>/dev/null', { encoding: 'utf8', timeout: 5000 });
+    return true;
+  } catch (e) {}
+  return false;
+}
+
 function rollbackWifi(previousSsid) {
   if (!previousSsid) return;
   console.log(`[pi] WiFi switch failed, rolling back to "${previousSsid}"`);
@@ -138,7 +150,14 @@ function addWifiNetwork(ssid, password) {
   if (!password) {
     try {
       const out = execSync(`sudo nmcli connection up "${ssid}" 2>&1`, { encoding: 'utf8', timeout: 30000 });
-      if (out.includes('successfully activated')) return { success: true };
+      if (out.includes('successfully activated')) {
+        if (!hasInternet()) {
+          console.log(`[pi] Connected to "${ssid}" but no internet, rolling back`);
+          rollbackWifi(previousWifi);
+          return { success: false, error: 'No internet on that network' };
+        }
+        return { success: true };
+      }
     } catch (e) {
       const msg = e.stderr || e.stdout || e.message || '';
       if (msg.includes('key-mgmt') || msg.includes('property is missing')) {
@@ -154,6 +173,11 @@ function addWifiNetwork(ssid, password) {
       : `sudo nmcli device wifi connect "${ssid}" 2>&1`;
     const out = execSync(cmd, { encoding: 'utf8', timeout: 30000 });
     if (out.includes('successfully activated')) {
+      if (!hasInternet()) {
+        console.log(`[pi] Connected to "${ssid}" but no internet, rolling back`);
+        rollbackWifi(previousWifi);
+        return { success: false, error: 'No internet on that network' };
+      }
       return { success: true };
     }
     rollbackWifi(previousWifi);
