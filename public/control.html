@@ -335,8 +335,9 @@
   <div class="card-title">Listeners</div>
   <div class="big-number" id="listener-count">0</div>
   <div class="big-label">connected</div>
-  <div style="text-align:center;margin-top:0.5rem">
-    <a href="/stream" id="stream-url" style="font-size:0.75rem;color:#4f46e5;word-break:break-all"></a>
+  <div style="margin-top:0.6rem;font-size:0.72rem;line-height:1.7">
+    <div><span style="color:#888">Listen:</span> <a href="/" id="listen-url" target="_blank" style="color:#4f46e5;word-break:break-all"></a></div>
+    <div><span style="color:#888">IVR:</span> <a href="/stream" id="ivr-url" target="_blank" style="color:#4f46e5;word-break:break-all"></a></div>
   </div>
 </div>
 
@@ -404,8 +405,10 @@
   const wifiConnectPass = document.getElementById('wifi-connect-pass');
   const wifiConnectBtn = document.getElementById('wifi-connect-btn');
 
-  document.getElementById('stream-url').textContent = location.origin + '/stream';
-  document.getElementById('stream-url').href = location.origin + '/stream';
+  document.getElementById('listen-url').textContent = location.origin;
+  document.getElementById('listen-url').href = location.origin;
+  document.getElementById('ivr-url').textContent = location.origin + '/stream';
+  document.getElementById('ivr-url').href = location.origin + '/stream';
 
   let socket = null;
   let isTalking = false;
