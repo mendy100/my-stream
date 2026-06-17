@@ -106,18 +106,20 @@ function listWifiNetworks() {
 
 function addWifiNetwork(ssid, password) {
   try {
-    execSync(`sudo nmcli device wifi connect "${ssid}" password "${password}"`, { encoding: 'utf8', timeout: 15000 });
-    return { success: true };
-  } catch (e) {
-    // Fallback: add to wpa_supplicant
-    try {
-      const entry = `\n\nnetwork={\n    ssid="${ssid}"\n    psk="${password}"\n    key_mgmt=WPA-PSK\n}\n`;
-      execSync(`echo '${entry}' | sudo tee -a /etc/wpa_supplicant/wpa_supplicant.conf`, { encoding: 'utf8' });
-      execSync('sudo wpa_cli -i wlan0 reconfigure 2>/dev/null', { encoding: 'utf8' });
-      return { success: true, method: 'wpa_supplicant' };
-    } catch (e2) {
-      return { success: false, error: e2.message };
+    const out = execSync(`sudo nmcli device wifi connect "${ssid}" password "${password}" 2>&1`, { encoding: 'utf8', timeout: 30000 });
+    if (out.includes('successfully activated')) {
+      return { success: true };
     }
+    return { success: false, error: 'Connection failed' };
+  } catch (e) {
+    const msg = e.stderr || e.stdout || e.message || '';
+    if (msg.includes('Secrets were required') || msg.includes('No suitable device') || msg.includes('password')) {
+      return { success: false, error: 'Wrong password' };
+    }
+    if (msg.includes('No network with SSID')) {
+      return { success: false, error: 'Network not found' };
+    }
+    return { success: false, error: msg.split('\n')[0] || 'Connection failed' };
   }
 }
 
@@ -127,6 +129,28 @@ function removeWifiNetwork(ssid) {
     return { success: true };
   } catch (e) {
     return { success: false, error: e.message };
+  }
+}
+
+function scanWifiNetworks() {
+  try {
+    execSync('sudo nmcli device wifi rescan 2>/dev/null', { encoding: 'utf8', timeout: 10000 });
+  } catch (e) {}
+  try {
+    const out = execSync('nmcli -t -f SSID,SIGNAL,SECURITY device wifi list', { encoding: 'utf8', timeout: 10000 });
+    const seen = new Set();
+    const networks = [];
+    for (const line of out.trim().split('\n')) {
+      const parts = line.split(':');
+      const ssid = parts[0];
+      if (!ssid || seen.has(ssid)) continue;
+      seen.add(ssid);
+      networks.push({ ssid, signal: parseInt(parts[1]) || 0, security: parts[2] || 'Open' });
+    }
+    networks.sort((a, b) => b.signal - a.signal);
+    return { networks };
+  } catch (e) {
+    return { networks: [], error: 'Scan failed: ' + e.message };
   }
 }
 
@@ -193,6 +217,10 @@ function start() {
   socket.on('remove-wifi', (ssid, cb) => {
     const result = removeWifiNetwork(ssid);
     if (cb) cb(result);
+  });
+
+  socket.on('scan-wifi', (_, cb) => {
+    if (cb) cb(scanWifiNetworks());
   });
 
   function startStatus() {

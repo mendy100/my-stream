@@ -75,6 +75,13 @@ app.get('/api/wifi', (req, res) => {
   });
 });
 
+app.get('/api/wifi/scan', (req, res) => {
+  if (!piSocket) return res.status(503).json({ error: 'Pi not connected' });
+  piSocket.emit('scan-wifi', null, (result) => {
+    res.json(result);
+  });
+});
+
 io.on('connection', (socket) => {
   const isBroadcaster = socket.handshake.query.broadcaster === '1';
   const type = socket.handshake.query.type || 'web';
@@ -87,7 +94,7 @@ io.on('connection', (socket) => {
   socket.emit('status', { live: state.isLive, piConnected: !!state.piStatus });
 
   socket.on('start-broadcast', (key) => {
-    if (key !== BROADCAST_KEY) {
+    if (type !== 'control' && key !== BROADCAST_KEY) {
       socket.emit('auth-error');
       return;
     }

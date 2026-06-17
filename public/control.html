@@ -231,8 +231,7 @@
   }
 
   /* Auth */
-  .auth-section { text-align: center; }
-  .control-section { display: none; }
+  .control-section { display: block; }
   .key-input {
     width: 100%;
     padding: 0.7rem;
@@ -275,13 +274,6 @@
 
 <h1>Control Panel</h1>
 
-<div class="auth-section" id="auth-section">
-  <div class="card">
-    <div class="card-title">Broadcast Key</div>
-    <input type="text" class="key-input" id="key-input" placeholder="Enter broadcast key">
-    <button class="connect-btn" id="connect-btn">Connect</button>
-  </div>
-</div>
 
 <div class="control-section" id="control-section">
 
@@ -329,7 +321,7 @@
   <!-- Listen -->
   <div class="card">
     <div class="card-title">Monitor Stream</div>
-    <button class="listen-btn" id="listen-btn">Listen</button>
+    <button class="listen-btn" id="listen-btn">Hold to Listen</button>
   </div>
 
   <!-- Talk -->
@@ -341,15 +333,38 @@
     </div>
   </div>
 
-  <!-- WiFi -->
+  <!-- Saved WiFi -->
   <div class="card">
     <div class="card-title">
-      Pi WiFi Networks
+      Saved WiFi Networks
       <button id="wifi-refresh" style="background:none;border:none;color:#666;font-size:0.7rem;cursor:pointer;width:auto">Refresh</button>
     </div>
     <div class="wifi-list" id="wifi-list">
       <div style="color:#666;font-size:0.8rem;text-align:center;padding:0.5rem">Loading...</div>
     </div>
+  </div>
+
+  <!-- Scan WiFi -->
+  <div class="card">
+    <div class="card-title">
+      Available WiFi
+      <button id="wifi-scan-btn" style="background:none;border:none;color:#666;font-size:0.7rem;cursor:pointer;width:auto">Scan</button>
+    </div>
+    <div id="scan-list">
+      <div style="color:#666;font-size:0.8rem;text-align:center;padding:0.5rem">Tap Scan to find networks</div>
+    </div>
+    <div id="wifi-connect-form" style="display:none;margin-top:0.5rem">
+      <div style="font-size:0.85rem;margin-bottom:0.4rem">Connect to: <strong id="wifi-connect-ssid"></strong></div>
+      <div class="wifi-add">
+        <input type="password" id="wifi-connect-pass" placeholder="Password">
+        <button id="wifi-connect-btn">Connect</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Manual WiFi -->
+  <div class="card">
+    <div class="card-title">Add WiFi Manually</div>
     <div class="wifi-add">
       <input type="text" id="wifi-ssid" placeholder="WiFi name">
       <input type="password" id="wifi-pass" placeholder="Password">
@@ -390,7 +405,6 @@
   const wifiRefresh = document.getElementById('wifi-refresh');
 
   let socket = null;
-  let broadcastKey = '';
   let isTalking = false;
   let audioCtx = null;
   let mediaStream = null;
@@ -398,35 +412,12 @@
   let audioPlayer = null;
   let isListening = false;
 
-  const savedKey = localStorage.getItem('control-key');
-  if (savedKey) keyInput.value = savedKey;
-
-  connectBtn.addEventListener('click', () => {
-    const key = keyInput.value.trim();
-    if (!key) return;
-    broadcastKey = key;
-    connectBtn.disabled = true;
-    connectBtn.textContent = 'Connecting...';
-    connect(key);
-  });
-
-  function connect(key) {
+  function connect() {
     socket = io({ query: { broadcaster: '1', type: 'control' } });
 
     socket.on('connect', () => {
-      socket.emit('start-broadcast', key);
+      socket.emit('start-broadcast', 'auto');
       connectionLost.style.display = 'none';
-    });
-
-    socket.on('auth-error', () => {
-      alert('Invalid broadcast key');
-      connectBtn.disabled = false;
-      connectBtn.textContent = 'Connect';
-      socket.close();
-    });
-
-    socket.on('status', (data) => {
-      // if we got status without auth-error, we're in
     });
 
     socket.on('listeners', (n) => {
@@ -441,18 +432,13 @@
 
     socket.on('reconnect', () => {
       connectionLost.style.display = 'none';
-      socket.emit('start-broadcast', key);
+      socket.emit('start-broadcast', 'auto');
     });
 
-    setTimeout(() => {
-      if (socket.connected) {
-        localStorage.setItem('control-key', key);
-        authSection.style.display = 'none';
-        controlSection.style.display = 'block';
-        loadWifiList();
-      }
-    }, 700);
+    loadWifiList();
   }
+
+  connect();
 
   // --- Pi Status ---
   let piTimeout = null;
@@ -500,34 +486,32 @@
     }, 12000);
   }
 
-  // --- Listen ---
-  listenBtn.addEventListener('click', () => {
-    if (isListening) {
-      stopListening();
-    } else {
-      startListening();
-    }
-  });
+  // --- Listen (hold to listen) ---
+  listenBtn.addEventListener('touchstart', startListening, { passive: true });
+  listenBtn.addEventListener('touchend', stopListening);
+  listenBtn.addEventListener('touchcancel', stopListening);
+  listenBtn.addEventListener('mousedown', startListening);
+  listenBtn.addEventListener('mouseup', stopListening);
+  listenBtn.addEventListener('mouseleave', stopListening);
 
   function startListening() {
+    if (isListening) return;
     audioPlayer = new Audio('/stream');
     audioPlayer.play().catch(() => {});
     isListening = true;
-    listenBtn.textContent = 'Stop Listening';
+    listenBtn.textContent = 'Listening...';
     listenBtn.classList.add('playing');
-    audioPlayer.addEventListener('error', () => {
-      stopListening();
-    });
   }
 
   function stopListening() {
+    if (!isListening) return;
     if (audioPlayer) {
       audioPlayer.pause();
       audioPlayer.src = '';
       audioPlayer = null;
     }
     isListening = false;
-    listenBtn.textContent = 'Listen';
+    listenBtn.textContent = 'Hold to Listen';
     listenBtn.classList.remove('playing');
   }
 
@@ -658,14 +642,19 @@
     if (!ssid) return;
     wifiAddBtn.textContent = 'Adding...';
     try {
-      await fetch('/api/wifi', {
+      const res = await fetch('/api/wifi', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ssid, password: pass }),
       });
-      wifiSsid.value = '';
-      wifiPass.value = '';
-      loadWifiList();
+      const data = await res.json();
+      if (data.success) {
+        wifiSsid.value = '';
+        wifiPass.value = '';
+        loadWifiList();
+      } else {
+        alert(data.error || 'Failed to connect');
+      }
     } catch (e) {
       alert('Failed to add WiFi');
     }
@@ -673,6 +662,76 @@
   });
 
   wifiRefresh.addEventListener('click', loadWifiList);
+
+  // --- WiFi Scan ---
+  const scanList = document.getElementById('scan-list');
+  const wifiScanBtn = document.getElementById('wifi-scan-btn');
+  const wifiConnectForm = document.getElementById('wifi-connect-form');
+  const wifiConnectSsid = document.getElementById('wifi-connect-ssid');
+  const wifiConnectPass = document.getElementById('wifi-connect-pass');
+  const wifiConnectBtn = document.getElementById('wifi-connect-btn');
+
+  let selectedScanSsid = '';
+
+  wifiScanBtn.addEventListener('click', async () => {
+    wifiScanBtn.textContent = 'Scanning...';
+    scanList.innerHTML = '<div style="color:#666;font-size:0.8rem;text-align:center;padding:0.5rem">Scanning...</div>';
+    wifiConnectForm.style.display = 'none';
+    try {
+      const res = await fetch('/api/wifi/scan');
+      const data = await res.json();
+      if (!data.networks || data.networks.length === 0) {
+        scanList.innerHTML = '<div style="color:#666;font-size:0.8rem;text-align:center;padding:0.5rem">No networks found</div>';
+      } else {
+        scanList.innerHTML = data.networks.map(n =>
+          '<div class="wifi-item scan-item" data-ssid="' + escHtml(n.ssid) + '" style="cursor:pointer">' +
+            '<span class="ssid">' + escHtml(n.ssid) + '</span>' +
+            '<span style="color:#888;font-size:0.75rem;margin-left:0.5rem">' + n.signal + '%</span>' +
+            '<span style="color:#555;font-size:0.65rem;margin-left:0.3rem">' + escHtml(n.security) + '</span>' +
+          '</div>'
+        ).join('');
+
+        scanList.querySelectorAll('.scan-item').forEach(item => {
+          item.addEventListener('click', () => {
+            selectedScanSsid = item.dataset.ssid;
+            wifiConnectSsid.textContent = selectedScanSsid;
+            wifiConnectPass.value = '';
+            wifiConnectForm.style.display = 'block';
+            wifiConnectPass.focus();
+            scanList.querySelectorAll('.scan-item').forEach(i => i.style.borderColor = '');
+            item.style.borderColor = '#4ade80';
+          });
+        });
+      }
+    } catch (e) {
+      scanList.innerHTML = '<div style="color:#666;font-size:0.8rem;text-align:center;padding:0.5rem">Scan failed</div>';
+    }
+    wifiScanBtn.textContent = 'Scan';
+  });
+
+  wifiConnectBtn.addEventListener('click', async () => {
+    if (!selectedScanSsid) return;
+    wifiConnectBtn.textContent = 'Connecting...';
+    try {
+      const res = await fetch('/api/wifi', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ssid: selectedScanSsid, password: wifiConnectPass.value }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        wifiConnectForm.style.display = 'none';
+        wifiConnectPass.value = '';
+        selectedScanSsid = '';
+        loadWifiList();
+      } else {
+        alert(data.error || 'Connection failed');
+      }
+    } catch (e) {
+      alert('Failed to connect');
+    }
+    wifiConnectBtn.textContent = 'Connect';
+  });
 
 })();
 </script>
