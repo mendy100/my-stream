@@ -1,0 +1,680 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#0a0a0a">
+<link rel="manifest" href="/manifest.json">
+<title>Control Panel</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: #0a0a0a;
+    color: #fff;
+    min-height: 100vh;
+    padding: 1rem;
+    padding-bottom: 2rem;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+
+  h1 { font-size: 1.3rem; font-weight: 700; text-align: center; margin-bottom: 1rem; }
+
+  .card {
+    background: #111;
+    border: 2px solid #222;
+    border-radius: 14px;
+    padding: 1rem;
+    margin-bottom: 0.8rem;
+  }
+  .card-title {
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: #666;
+    margin-bottom: 0.6rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  /* Status dots */
+  .dot {
+    width: 10px; height: 10px;
+    border-radius: 50%;
+    background: #555;
+    display: inline-block;
+    flex-shrink: 0;
+  }
+  .dot.green { background: #4ade80; box-shadow: 0 0 6px #4ade8066; }
+  .dot.red { background: #ef4444; box-shadow: 0 0 6px #ef444466; }
+  .dot.yellow { background: #facc15; box-shadow: 0 0 6px #facc1566; }
+
+  /* Pi status */
+  .status-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 0.4rem;
+  }
+  .status-text { font-size: 0.9rem; }
+  .status-detail { color: #888; font-size: 0.75rem; }
+
+  .info-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.4rem;
+    margin-top: 0.5rem;
+  }
+  .info-item {
+    background: #0a0a0a;
+    border-radius: 8px;
+    padding: 0.4rem 0.6rem;
+  }
+  .info-label { font-size: 0.6rem; color: #666; text-transform: uppercase; }
+  .info-value { font-size: 0.85rem; margin-top: 0.1rem; }
+
+  /* Connection lost banner */
+  .banner {
+    display: none;
+    border-radius: 10px;
+    padding: 0.7rem;
+    margin-bottom: 0.8rem;
+    text-align: center;
+    font-size: 0.85rem;
+    font-weight: 600;
+  }
+  .banner.error {
+    background: #1a0000;
+    border: 2px solid #ef4444;
+    color: #ef4444;
+  }
+
+  /* Listeners */
+  .big-number {
+    text-align: center;
+    font-size: 2.2rem;
+    font-weight: 700;
+    line-height: 1;
+  }
+  .big-label {
+    text-align: center;
+    color: #888;
+    font-size: 0.75rem;
+    margin-top: 0.2rem;
+  }
+
+  /* Talk button */
+  .talk-btn {
+    width: 100%;
+    padding: 1.1rem;
+    font-size: 1.1rem;
+    font-weight: 700;
+    border: none;
+    border-radius: 12px;
+    cursor: pointer;
+    transition: transform 0.1s, background 0.15s;
+    background: #1a1a2e;
+    color: #7c7cff;
+    border: 2px solid #2a2a4e;
+  }
+  .talk-btn:active { transform: scale(0.97); }
+  .talk-btn.talking {
+    background: #e53e3e;
+    color: #fff;
+    border-color: #e53e3e;
+    animation: talkPulse 1.5s infinite;
+  }
+  @keyframes talkPulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(229,62,62,0.3); }
+    50% { box-shadow: 0 0 0 10px rgba(229,62,62,0); }
+  }
+
+  /* Level meter */
+  .meter {
+    height: 5px;
+    background: #1a1a1a;
+    border-radius: 3px;
+    margin-top: 0.5rem;
+    overflow: hidden;
+    display: none;
+  }
+  .meter.active { display: block; }
+  .meter-bar {
+    height: 100%;
+    width: 0%;
+    border-radius: 3px;
+    background: #4ade80;
+    transition: width 0.05s;
+  }
+
+  /* Listen button */
+  .listen-btn {
+    width: 100%;
+    padding: 0.9rem;
+    font-size: 1rem;
+    font-weight: 600;
+    border: none;
+    border-radius: 12px;
+    cursor: pointer;
+    background: #0a2a0a;
+    color: #4ade80;
+    border: 2px solid #1a3a1a;
+    transition: transform 0.1s;
+  }
+  .listen-btn:active { transform: scale(0.97); }
+  .listen-btn.playing {
+    background: #1a3a1a;
+    border-color: #4ade80;
+  }
+
+  /* WiFi section */
+  .wifi-list {
+    margin-bottom: 0.5rem;
+  }
+  .wifi-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.5rem 0.6rem;
+    background: #0a0a0a;
+    border-radius: 8px;
+    margin-bottom: 0.3rem;
+    font-size: 0.85rem;
+  }
+  .wifi-item .ssid { flex: 1; }
+  .wifi-item .connected-badge {
+    font-size: 0.65rem;
+    background: #0a2a0a;
+    color: #4ade80;
+    padding: 0.15rem 0.4rem;
+    border-radius: 4px;
+    margin-left: 0.5rem;
+  }
+  .wifi-remove {
+    background: none;
+    border: none;
+    color: #ef4444;
+    font-size: 1rem;
+    cursor: pointer;
+    padding: 0 0.3rem;
+    width: auto;
+  }
+  .wifi-add {
+    display: flex;
+    gap: 0.4rem;
+  }
+  .wifi-add input {
+    flex: 1;
+    padding: 0.5rem;
+    font-size: 0.85rem;
+    border: 2px solid #252525;
+    border-radius: 8px;
+    background: #0a0a0a;
+    color: #fff;
+    outline: none;
+  }
+  .wifi-add input:focus { border-color: #444; }
+  .wifi-add button {
+    padding: 0.5rem 0.8rem;
+    font-size: 0.85rem;
+    font-weight: 600;
+    border: none;
+    border-radius: 8px;
+    background: #222;
+    color: #fff;
+    cursor: pointer;
+    white-space: nowrap;
+    width: auto;
+  }
+
+  /* Auth */
+  .auth-section { text-align: center; }
+  .control-section { display: none; }
+  .key-input {
+    width: 100%;
+    padding: 0.7rem;
+    font-size: 1rem;
+    border: 2px solid #252525;
+    border-radius: 10px;
+    background: #0a0a0a;
+    color: #fff;
+    outline: none;
+    text-align: center;
+    margin-bottom: 0.7rem;
+  }
+  .key-input:focus { border-color: #444; }
+  .connect-btn {
+    width: 100%;
+    padding: 0.8rem;
+    font-size: 1rem;
+    font-weight: 600;
+    border: none;
+    border-radius: 10px;
+    cursor: pointer;
+    background: #e53e3e;
+    color: #fff;
+  }
+  .connect-btn:disabled { opacity: 0.5; }
+
+  /* Stream uptime */
+  .uptime-row {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.4rem;
+    font-size: 0.8rem;
+    color: #888;
+    margin-top: 0.3rem;
+  }
+</style>
+</head>
+<body>
+
+<h1>Control Panel</h1>
+
+<div class="auth-section" id="auth-section">
+  <div class="card">
+    <div class="card-title">Broadcast Key</div>
+    <input type="text" class="key-input" id="key-input" placeholder="Enter broadcast key">
+    <button class="connect-btn" id="connect-btn">Connect</button>
+  </div>
+</div>
+
+<div class="control-section" id="control-section">
+
+  <div class="banner error" id="connection-lost">Connection lost - reconnecting...</div>
+
+  <!-- Pi Status -->
+  <div class="card" id="pi-card">
+    <div class="card-title">
+      Raspberry Pi
+      <div class="dot" id="pi-dot"></div>
+    </div>
+    <div class="status-row">
+      <div>
+        <div class="status-text" id="pi-status-text">Checking...</div>
+        <div class="status-detail" id="pi-status-detail"></div>
+      </div>
+    </div>
+    <div class="info-grid" id="pi-info" style="display:none">
+      <div class="info-item">
+        <div class="info-label">Connection</div>
+        <div class="info-value" id="pi-conn-type">-</div>
+      </div>
+      <div class="info-item">
+        <div class="info-label">Signal</div>
+        <div class="info-value" id="pi-signal">-</div>
+      </div>
+      <div class="info-item">
+        <div class="info-label">Network</div>
+        <div class="info-value" id="pi-ssid">-</div>
+      </div>
+      <div class="info-item">
+        <div class="info-label">Pi Uptime</div>
+        <div class="info-value" id="pi-uptime">-</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Listeners -->
+  <div class="card">
+    <div class="card-title">Listeners</div>
+    <div class="big-number" id="listener-count">0</div>
+    <div class="big-label">connected</div>
+  </div>
+
+  <!-- Listen -->
+  <div class="card">
+    <div class="card-title">Monitor Stream</div>
+    <button class="listen-btn" id="listen-btn">Listen</button>
+  </div>
+
+  <!-- Talk -->
+  <div class="card">
+    <div class="card-title">Talk from Phone</div>
+    <button class="talk-btn" id="talk-btn">Hold to Talk</button>
+    <div class="meter" id="meter">
+      <div class="meter-bar" id="meter-bar"></div>
+    </div>
+  </div>
+
+  <!-- WiFi -->
+  <div class="card">
+    <div class="card-title">
+      Pi WiFi Networks
+      <button id="wifi-refresh" style="background:none;border:none;color:#666;font-size:0.7rem;cursor:pointer;width:auto">Refresh</button>
+    </div>
+    <div class="wifi-list" id="wifi-list">
+      <div style="color:#666;font-size:0.8rem;text-align:center;padding:0.5rem">Loading...</div>
+    </div>
+    <div class="wifi-add">
+      <input type="text" id="wifi-ssid" placeholder="WiFi name">
+      <input type="password" id="wifi-pass" placeholder="Password">
+      <button id="wifi-add-btn">Add</button>
+    </div>
+  </div>
+
+</div>
+
+<script src="/socket.io/socket.io.js"></script>
+<script>
+(function() {
+  const authSection = document.getElementById('auth-section');
+  const controlSection = document.getElementById('control-section');
+  const keyInput = document.getElementById('key-input');
+  const connectBtn = document.getElementById('connect-btn');
+  const connectionLost = document.getElementById('connection-lost');
+
+  const piDot = document.getElementById('pi-dot');
+  const piStatusText = document.getElementById('pi-status-text');
+  const piStatusDetail = document.getElementById('pi-status-detail');
+  const piInfo = document.getElementById('pi-info');
+  const piConnType = document.getElementById('pi-conn-type');
+  const piSignal = document.getElementById('pi-signal');
+  const piSsid = document.getElementById('pi-ssid');
+  const piUptime = document.getElementById('pi-uptime');
+
+  const listenerCount = document.getElementById('listener-count');
+  const listenBtn = document.getElementById('listen-btn');
+  const talkBtn = document.getElementById('talk-btn');
+  const meter = document.getElementById('meter');
+  const meterBar = document.getElementById('meter-bar');
+
+  const wifiList = document.getElementById('wifi-list');
+  const wifiSsid = document.getElementById('wifi-ssid');
+  const wifiPass = document.getElementById('wifi-pass');
+  const wifiAddBtn = document.getElementById('wifi-add-btn');
+  const wifiRefresh = document.getElementById('wifi-refresh');
+
+  let socket = null;
+  let broadcastKey = '';
+  let isTalking = false;
+  let audioCtx = null;
+  let mediaStream = null;
+  let processor = null;
+  let audioPlayer = null;
+  let isListening = false;
+
+  const savedKey = localStorage.getItem('control-key');
+  if (savedKey) keyInput.value = savedKey;
+
+  connectBtn.addEventListener('click', () => {
+    const key = keyInput.value.trim();
+    if (!key) return;
+    broadcastKey = key;
+    connectBtn.disabled = true;
+    connectBtn.textContent = 'Connecting...';
+    connect(key);
+  });
+
+  function connect(key) {
+    socket = io({ query: { broadcaster: '1', type: 'control' } });
+
+    socket.on('connect', () => {
+      socket.emit('start-broadcast', key);
+      connectionLost.style.display = 'none';
+    });
+
+    socket.on('auth-error', () => {
+      alert('Invalid broadcast key');
+      connectBtn.disabled = false;
+      connectBtn.textContent = 'Connect';
+      socket.close();
+    });
+
+    socket.on('status', (data) => {
+      // if we got status without auth-error, we're in
+    });
+
+    socket.on('listeners', (n) => {
+      listenerCount.textContent = n;
+    });
+
+    socket.on('pi-status', updatePiStatus);
+
+    socket.on('disconnect', () => {
+      connectionLost.style.display = 'block';
+    });
+
+    socket.on('reconnect', () => {
+      connectionLost.style.display = 'none';
+      socket.emit('start-broadcast', key);
+    });
+
+    setTimeout(() => {
+      if (socket.connected) {
+        localStorage.setItem('control-key', key);
+        authSection.style.display = 'none';
+        controlSection.style.display = 'block';
+        loadWifiList();
+      }
+    }, 700);
+  }
+
+  // --- Pi Status ---
+  let piTimeout = null;
+  function updatePiStatus(info) {
+    clearTimeout(piTimeout);
+    if (!info) {
+      piDot.className = 'dot red';
+      piStatusText.textContent = 'Disconnected';
+      piStatusDetail.textContent = 'Pi is not connected';
+      piInfo.style.display = 'none';
+      return;
+    }
+
+    piDot.className = 'dot green';
+    piStatusText.textContent = 'Connected & Streaming';
+    piStatusDetail.textContent = 'Audio device: ' + (info.device || 'unknown');
+    piInfo.style.display = 'grid';
+
+    const net = info.network || {};
+    piConnType.textContent = net.type === 'wifi' ? 'WiFi' : net.type === 'ethernet' ? 'Ethernet' : net.type || '-';
+
+    if (net.type === 'wifi' && net.signal) {
+      const dbm = parseInt(net.signal);
+      let q = 'Excellent';
+      if (dbm < -80) q = 'Weak';
+      else if (dbm < -70) q = 'Fair';
+      else if (dbm < -60) q = 'Good';
+      piSignal.textContent = dbm + ' dBm (' + q + ')';
+    } else {
+      piSignal.textContent = net.type === 'ethernet' ? 'Wired' : '-';
+    }
+
+    piSsid.textContent = net.ssid || (net.type === 'ethernet' ? 'Wired' : '-');
+
+    if (info.uptime) {
+      const h = Math.floor(info.uptime / 3600);
+      const m = Math.floor((info.uptime % 3600) / 60);
+      piUptime.textContent = h > 0 ? h + 'h ' + m + 'm' : m + 'm';
+    }
+
+    piTimeout = setTimeout(() => {
+      piDot.className = 'dot yellow';
+      piStatusText.textContent = 'No recent update';
+      piStatusDetail.textContent = 'Pi may have lost connection';
+    }, 12000);
+  }
+
+  // --- Listen ---
+  listenBtn.addEventListener('click', () => {
+    if (isListening) {
+      stopListening();
+    } else {
+      startListening();
+    }
+  });
+
+  function startListening() {
+    audioPlayer = new Audio('/stream');
+    audioPlayer.play().catch(() => {});
+    isListening = true;
+    listenBtn.textContent = 'Stop Listening';
+    listenBtn.classList.add('playing');
+    audioPlayer.addEventListener('error', () => {
+      stopListening();
+    });
+  }
+
+  function stopListening() {
+    if (audioPlayer) {
+      audioPlayer.pause();
+      audioPlayer.src = '';
+      audioPlayer = null;
+    }
+    isListening = false;
+    listenBtn.textContent = 'Listen';
+    listenBtn.classList.remove('playing');
+  }
+
+  // --- Talk ---
+  talkBtn.addEventListener('touchstart', startTalking, { passive: true });
+  talkBtn.addEventListener('touchend', stopTalking);
+  talkBtn.addEventListener('touchcancel', stopTalking);
+  talkBtn.addEventListener('mousedown', startTalking);
+  talkBtn.addEventListener('mouseup', stopTalking);
+  talkBtn.addEventListener('mouseleave', stopTalking);
+
+  async function startTalking() {
+    if (isTalking) return;
+    isTalking = true;
+    talkBtn.classList.add('talking');
+    talkBtn.textContent = 'Talking...';
+    meter.classList.add('active');
+
+    try {
+      mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      audioCtx = new AudioContext();
+      const source = audioCtx.createMediaStreamSource(mediaStream);
+      const analyser = audioCtx.createAnalyser();
+      analyser.fftSize = 256;
+
+      processor = audioCtx.createScriptProcessor(1024, 1, 1);
+      const ratio = Math.round(audioCtx.sampleRate / 16000);
+
+      processor.onaudioprocess = (e) => {
+        if (!isTalking || !socket) return;
+        const input = e.inputBuffer.getChannelData(0);
+        const output = e.outputBuffer.getChannelData(0);
+        output.fill(0);
+
+        const outLen = Math.floor(input.length / ratio);
+        const buf = new Int16Array(outLen);
+        for (let i = 0; i < outLen; i++) {
+          let s = input[i * ratio];
+          s = Math.max(-1, Math.min(1, s));
+          buf[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+        }
+        socket.emit('audio', buf.buffer);
+      };
+
+      source.connect(analyser);
+      source.connect(processor);
+      const silent = audioCtx.createGain();
+      silent.gain.value = 0;
+      processor.connect(silent);
+      silent.connect(audioCtx.destination);
+
+      const dataArray = new Uint8Array(analyser.frequencyBinCount);
+      function updateMeter() {
+        if (!isTalking) return;
+        analyser.getByteFrequencyData(dataArray);
+        let sum = 0;
+        for (let i = 0; i < dataArray.length; i++) sum += dataArray[i];
+        const avg = sum / dataArray.length;
+        const pct = Math.min(100, (avg / 128) * 100);
+        meterBar.style.width = pct + '%';
+        meterBar.style.background = pct > 80 ? '#ef4444' : pct > 50 ? '#facc15' : '#4ade80';
+        requestAnimationFrame(updateMeter);
+      }
+      updateMeter();
+    } catch (err) {
+      alert('Could not access microphone');
+      stopTalking();
+    }
+  }
+
+  function stopTalking() {
+    if (!isTalking) return;
+    isTalking = false;
+    talkBtn.classList.remove('talking');
+    talkBtn.textContent = 'Hold to Talk';
+    meter.classList.remove('active');
+
+    if (processor) { processor.disconnect(); processor = null; }
+    if (audioCtx) { audioCtx.close(); audioCtx = null; }
+    if (mediaStream) { mediaStream.getTracks().forEach(t => t.stop()); mediaStream = null; }
+  }
+
+  // --- WiFi ---
+  async function loadWifiList() {
+    try {
+      const res = await fetch('/api/wifi');
+      if (!res.ok) {
+        wifiList.innerHTML = '<div style="color:#666;font-size:0.8rem;text-align:center;padding:0.5rem">Pi not connected</div>';
+        return;
+      }
+      const data = await res.json();
+      renderWifiList(data);
+    } catch (e) {
+      wifiList.innerHTML = '<div style="color:#666;font-size:0.8rem;text-align:center;padding:0.5rem">Could not load</div>';
+    }
+  }
+
+  function renderWifiList(data) {
+    if (!data.networks || data.networks.length === 0) {
+      wifiList.innerHTML = '<div style="color:#666;font-size:0.8rem;text-align:center;padding:0.5rem">No saved networks</div>';
+      return;
+    }
+    wifiList.innerHTML = data.networks.map(n =>
+      '<div class="wifi-item">' +
+        '<span class="ssid">' + escHtml(n.ssid) + '</span>' +
+        (n.active ? '<span class="connected-badge">Connected</span>' : '') +
+        '<button class="wifi-remove" data-ssid="' + escHtml(n.ssid) + '">x</button>' +
+      '</div>'
+    ).join('');
+
+    wifiList.querySelectorAll('.wifi-remove').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const ssid = btn.dataset.ssid;
+        if (!confirm('Remove "' + ssid + '"?')) return;
+        await fetch('/api/wifi/' + encodeURIComponent(ssid), { method: 'DELETE' });
+        loadWifiList();
+      });
+    });
+  }
+
+  function escHtml(s) {
+    return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  wifiAddBtn.addEventListener('click', async () => {
+    const ssid = wifiSsid.value.trim();
+    const pass = wifiPass.value;
+    if (!ssid) return;
+    wifiAddBtn.textContent = 'Adding...';
+    try {
+      await fetch('/api/wifi', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ssid, password: pass }),
+      });
+      wifiSsid.value = '';
+      wifiPass.value = '';
+      loadWifiList();
+    } catch (e) {
+      alert('Failed to add WiFi');
+    }
+    wifiAddBtn.textContent = 'Add';
+  });
+
+  wifiRefresh.addEventListener('click', loadWifiList);
+
+})();
+</script>
+</body>
+</html>
