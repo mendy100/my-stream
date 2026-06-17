@@ -335,6 +335,9 @@
   <div class="card-title">Listeners</div>
   <div class="big-number" id="listener-count">0</div>
   <div class="big-label">connected</div>
+  <div style="text-align:center;margin-top:0.5rem">
+    <a href="/stream" id="stream-url" style="font-size:0.75rem;color:#4f46e5;word-break:break-all"></a>
+  </div>
 </div>
 
 <!-- Listen + Talk side by side -->
@@ -400,6 +403,9 @@
   const wifiConnectLabel = document.getElementById('wifi-connect-label');
   const wifiConnectPass = document.getElementById('wifi-connect-pass');
   const wifiConnectBtn = document.getElementById('wifi-connect-btn');
+
+  document.getElementById('stream-url').textContent = location.origin + '/stream';
+  document.getElementById('stream-url').href = location.origin + '/stream';
 
   let socket = null;
   let isTalking = false;
@@ -508,8 +514,8 @@
       const source = audioCtx.createMediaStreamSource(mediaStream);
       const analyser = audioCtx.createAnalyser();
       analyser.fftSize = 256;
-      processor = audioCtx.createScriptProcessor(1024, 1, 1);
-      const ratio = Math.round(audioCtx.sampleRate / 16000);
+      processor = audioCtx.createScriptProcessor(2048, 1, 1);
+      const ratio = audioCtx.sampleRate / 16000;
       processor.onaudioprocess = (e) => {
         if (!isTalking || !socket) return;
         const input = e.inputBuffer.getChannelData(0);
@@ -517,7 +523,11 @@
         const outLen = Math.floor(input.length / ratio);
         const buf = new Int16Array(outLen);
         for (let i = 0; i < outLen; i++) {
-          let s = Math.max(-1, Math.min(1, input[i * ratio]));
+          const start = Math.floor(i * ratio);
+          const end = Math.min(Math.floor((i + 1) * ratio), input.length);
+          let sum = 0;
+          for (let j = start; j < end; j++) sum += input[j];
+          let s = Math.max(-1, Math.min(1, sum / (end - start)));
           buf[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
         }
         socket.emit('audio', buf.buffer);
