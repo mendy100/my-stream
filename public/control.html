@@ -623,11 +623,11 @@
   <div style="margin-top:0.5rem">
     <div style="display:flex;align-items:center;gap:0.4rem;padding:0.3rem 0">
       <span style="font-size:0.65rem;font-weight:600;color:#6366f1;min-width:2.2rem">WEB</span>
-      <a href="/" id="listen-url" target="_blank" style="font-size:0.72rem;color:#555;text-decoration:underline;text-underline-offset:2px;word-break:break-all" id="listen-url-text"></a>
+      <a href="/" id="listen-url" target="_blank" style="font-size:0.72rem;color:#555;text-decoration:underline;text-underline-offset:2px;word-break:break-all"></a>
     </div>
     <div style="display:flex;align-items:center;gap:0.4rem;padding:0.3rem 0">
       <span style="font-size:0.65rem;font-weight:600;color:#059669;min-width:2.2rem">IVR</span>
-      <a href="/stream" id="ivr-url" target="_blank" style="font-size:0.72rem;color:#555;text-decoration:underline;text-underline-offset:2px;word-break:break-all" id="ivr-url-text"></a>
+      <a href="/stream" id="ivr-url" target="_blank" style="font-size:0.72rem;color:#555;text-decoration:underline;text-underline-offset:2px;word-break:break-all"></a>
     </div>
   </div>
 </div>
@@ -697,9 +697,9 @@
   const wifiConnectBtn = document.getElementById('wifi-connect-btn');
 
   document.getElementById('listen-url').href = location.origin;
-  document.getElementById('listen-url-text').textContent = location.origin;
+  document.getElementById('listen-url').textContent = location.origin;
   document.getElementById('ivr-url').href = location.origin + '/stream';
-  document.getElementById('ivr-url-text').textContent = location.origin + '/stream';
+  document.getElementById('ivr-url').textContent = location.origin + '/stream';
 
   let socket = null;
   let isTalking = false;
