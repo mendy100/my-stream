@@ -234,7 +234,11 @@
   }
   .wifi-form-row {
     display: flex;
-    gap: 0.4rem;
+    gap: 0.35rem;
+    flex-wrap: wrap;
+  }
+  .wifi-form-row input {
+    min-width: 0;
   }
   .wifi-form-row input {
     flex: 1;
@@ -261,17 +265,18 @@
   }
   .wifi-form-row button:active { background: #4338ca; }
   .wifi-show-pass {
-    background: none;
+    background: #f7f8fc;
     border: 2px solid #ddd;
     border-radius: 10px;
-    padding: 0.55rem 0.6rem;
-    font-size: 0.9rem;
+    padding: 0.55rem 0.7rem;
+    font-size: 0.85rem;
     cursor: pointer;
-    color: #888;
+    color: #666;
     width: auto;
     flex-shrink: 0;
+    line-height: 1;
   }
-  .wifi-show-pass:active { background: #f0f2ff; }
+  .wifi-show-pass:active { background: #e0e7ff; }
 
   .scan-btn {
     background: none;
@@ -365,7 +370,7 @@
     <label id="wifi-connect-label">Connect to network</label>
     <div class="wifi-form-row">
       <input type="password" id="wifi-connect-pass" placeholder="Password">
-      <button class="wifi-show-pass" id="wifi-show-pass">👁</button>
+      <button class="wifi-show-pass" id="wifi-show-pass">Show</button>
       <button id="wifi-connect-btn">Connect</button>
     </div>
   </div>
@@ -696,7 +701,7 @@
   document.getElementById('wifi-show-pass').addEventListener('click', () => {
     const isPass = wifiConnectPass.type === 'password';
     wifiConnectPass.type = isPass ? 'text' : 'password';
-    document.getElementById('wifi-show-pass').textContent = isPass ? '🙈' : '👁';
+    document.getElementById('wifi-show-pass').textContent = isPass ? 'Hide' : 'Show';
   });
 
   wifiConnectBtn.addEventListener('click', async () => {
