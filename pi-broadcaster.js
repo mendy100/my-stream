@@ -223,7 +223,10 @@ function start() {
   });
 
   socket.on('scan-wifi', (_, cb) => {
-    if (cb) cb(scanWifiNetworks());
+    console.log('[pi] WiFi scan requested');
+    const result = scanWifiNetworks();
+    console.log('[pi] WiFi scan result:', result.networks.length, 'networks');
+    if (cb) cb(result);
   });
 
   function startStatus() {
