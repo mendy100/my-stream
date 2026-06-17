@@ -803,25 +803,19 @@
     talkBtn.textContent = 'Talking...';
     meter.classList.add('active');
     try {
-      mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      audioCtx = new AudioContext();
+      mediaStream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
+      audioCtx = new AudioContext({ sampleRate: 16000 });
       const source = audioCtx.createMediaStreamSource(mediaStream);
       const analyser = audioCtx.createAnalyser();
       analyser.fftSize = 256;
-      processor = audioCtx.createScriptProcessor(2048, 1, 1);
-      const ratio = audioCtx.sampleRate / 16000;
+      processor = audioCtx.createScriptProcessor(4096, 1, 1);
       processor.onaudioprocess = (e) => {
         if (!isTalking || !socket) return;
         const input = e.inputBuffer.getChannelData(0);
         e.outputBuffer.getChannelData(0).fill(0);
-        const outLen = Math.floor(input.length / ratio);
-        const buf = new Int16Array(outLen);
-        for (let i = 0; i < outLen; i++) {
-          const start = Math.floor(i * ratio);
-          const end = Math.min(Math.floor((i + 1) * ratio), input.length);
-          let sum = 0;
-          for (let j = start; j < end; j++) sum += input[j];
-          let s = Math.max(-1, Math.min(1, sum / (end - start)));
+        const buf = new Int16Array(input.length);
+        for (let i = 0; i < input.length; i++) {
+          let s = Math.max(-1, Math.min(1, input[i]));
           buf[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
         }
         socket.emit('audio', buf.buffer);
