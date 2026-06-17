@@ -105,8 +105,18 @@ function listWifiNetworks() {
 }
 
 function addWifiNetwork(ssid, password) {
+  // If no password, try activating a saved connection first
+  if (!password) {
+    try {
+      const out = execSync(`sudo nmcli connection up "${ssid}" 2>&1`, { encoding: 'utf8', timeout: 30000 });
+      if (out.includes('successfully activated')) return { success: true };
+    } catch (e) {}
+  }
   try {
-    const out = execSync(`sudo nmcli device wifi connect "${ssid}" password "${password}" 2>&1`, { encoding: 'utf8', timeout: 30000 });
+    const cmd = password
+      ? `sudo nmcli device wifi connect "${ssid}" password "${password}" 2>&1`
+      : `sudo nmcli device wifi connect "${ssid}" 2>&1`;
+    const out = execSync(cmd, { encoding: 'utf8', timeout: 30000 });
     if (out.includes('successfully activated')) {
       return { success: true };
     }

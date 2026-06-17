@@ -553,6 +553,19 @@
           '<button class="wifi-remove" data-ssid="' + esc(n.ssid) + '">x</button>' +
         '</div>'
       ).join('');
+      wifiSaved.querySelectorAll('.wifi-item').forEach(item => {
+        const ssid = item.querySelector('.ssid').textContent;
+        const isConnected = !!item.querySelector('.wifi-connected');
+        if (!isConnected) {
+          item.style.cursor = 'pointer';
+          item.addEventListener('click', async (e) => {
+            if (e.target.classList.contains('wifi-remove')) return;
+            item.querySelector('.ssid').textContent = 'Switching...';
+            await connectToWifi(ssid, '');
+            loadSavedWifi();
+          });
+        }
+      });
       wifiSaved.querySelectorAll('.wifi-remove').forEach(btn => {
         btn.addEventListener('click', async (e) => {
           e.stopPropagation();
