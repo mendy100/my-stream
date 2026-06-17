@@ -592,6 +592,8 @@
   }
 
   // --- WiFi Scan ---
+  let lastScanData = [];
+
   wifiScanBtn.addEventListener('click', async () => {
     wifiScanBtn.textContent = 'Scanning...';
     scanList.innerHTML = '<div class="empty-msg">Scanning nearby networks...</div>';
@@ -599,10 +601,17 @@
     try {
       const res = await fetch('/api/wifi/scan');
       const data = await res.json();
-      if (!data.networks || data.networks.length === 0) {
-        scanList.innerHTML = '<div class="empty-msg">No networks found</div>';
+      lastScanData = data.networks || [];
+      // Update saved networks with signal info
+      updateSavedSignals();
+      // Filter out networks that are already in saved list
+      const savedNames = new Set();
+      wifiSaved.querySelectorAll('.ssid').forEach(el => savedNames.add(el.textContent));
+      const unsaved = lastScanData.filter(n => !savedNames.has(n.ssid));
+      if (unsaved.length === 0) {
+        scanList.innerHTML = '<div class="empty-msg">No new networks found</div>';
       } else {
-        scanList.innerHTML = data.networks.map(n =>
+        scanList.innerHTML = unsaved.map(n =>
           '<div class="wifi-item" data-ssid="' + esc(n.ssid) + '" data-open="' + (n.open ? '1' : '0') + '">' +
             '<span class="ssid">' + esc(n.ssid) + '</span>' +
             '<span class="wifi-signal">' + n.signal + '%</span>' +
@@ -612,10 +621,6 @@
         scanList.querySelectorAll('.wifi-item').forEach(item => {
           item.addEventListener('click', async () => {
             const ssid = item.dataset.ssid;
-            // Check if already connected
-            const connBadge = wifiSaved.querySelector('.wifi-connected');
-            if (connBadge && connBadge.parentElement.querySelector('.ssid').textContent === ssid) return;
-
             scanList.querySelectorAll('.wifi-item').forEach(i => i.style.borderColor = 'transparent');
             item.style.borderColor = '#4f46e5';
 
@@ -639,6 +644,24 @@
     }
     wifiScanBtn.textContent = 'Scan';
   });
+
+  function updateSavedSignals() {
+    if (!lastScanData.length) return;
+    const signalMap = {};
+    lastScanData.forEach(n => { signalMap[n.ssid] = n.signal; });
+    wifiSaved.querySelectorAll('.wifi-item').forEach(item => {
+      const ssid = item.querySelector('.ssid').textContent;
+      const existing = item.querySelector('.wifi-signal');
+      if (existing) existing.remove();
+      if (signalMap[ssid] !== undefined) {
+        const badge = document.createElement('span');
+        badge.className = 'wifi-signal';
+        badge.textContent = signalMap[ssid] + '%';
+        const firstBadge = item.querySelector('.wifi-connected') || item.querySelector('.wifi-remove');
+        item.insertBefore(badge, firstBadge);
+      }
+    });
+  }
 
   async function connectToWifi(ssid, password, silent) {
     try {
