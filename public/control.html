@@ -485,6 +485,10 @@
 </head>
 <body>
 
+<div style="position:fixed;top:0.6rem;right:3.2rem;display:flex;gap:0.6rem;align-items:center;z-index:100">
+  <a href="/" target="_blank" id="listen-url-top" style="font-size:0.65rem;color:#6366f1;font-weight:600;text-decoration:none">WEB</a>
+  <a href="/stream" target="_blank" id="ivr-url-top" style="font-size:0.65rem;color:#059669;font-weight:600;text-decoration:none">IVR</a>
+</div>
 <button class="settings-toggle" id="settings-toggle">&#9881;</button>
 <div class="settings-overlay" id="settings-overlay"></div>
 <div class="settings-panel" id="settings-panel">
@@ -631,16 +635,6 @@
   <div class="card-title">Listeners</div>
   <div class="big-number" id="listener-count">0</div>
   <div class="big-label">connected</div>
-  <div style="margin-top:0.5rem">
-    <div style="display:flex;align-items:center;gap:0.4rem;padding:0.3rem 0">
-      <span style="font-size:0.65rem;font-weight:600;color:#6366f1;min-width:2.2rem">WEB</span>
-      <a href="/" id="listen-url" target="_blank" style="font-size:0.72rem;color:#555;text-decoration:underline;text-underline-offset:2px;word-break:break-all"></a>
-    </div>
-    <div style="display:flex;align-items:center;gap:0.4rem;padding:0.3rem 0">
-      <span style="font-size:0.65rem;font-weight:600;color:#059669;min-width:2.2rem">IVR</span>
-      <a href="/stream" id="ivr-url" target="_blank" style="font-size:0.72rem;color:#555;text-decoration:underline;text-underline-offset:2px;word-break:break-all"></a>
-    </div>
-  </div>
 </div>
 
 <!-- Listen + Talk side by side -->
@@ -707,10 +701,8 @@
   const wifiConnectPass = document.getElementById('wifi-connect-pass');
   const wifiConnectBtn = document.getElementById('wifi-connect-btn');
 
-  document.getElementById('listen-url').href = location.origin;
-  document.getElementById('listen-url').textContent = location.origin;
-  document.getElementById('ivr-url').href = location.origin + '/stream';
-  document.getElementById('ivr-url').textContent = location.origin + '/stream';
+  document.getElementById('listen-url-top').href = location.origin;
+  document.getElementById('ivr-url-top').href = location.origin + '/stream';
 
   let socket = null;
   let isTalking = false;
