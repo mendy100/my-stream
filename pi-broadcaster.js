@@ -104,7 +104,36 @@ function listWifiNetworks() {
   }
 }
 
+function getCurrentWifi() {
+  try {
+    const out = execSync('nmcli -t -f NAME,TYPE,DEVICE connection show --active', { encoding: 'utf8', timeout: 5000 });
+    for (const line of out.trim().split('\n')) {
+      const parts = line.split(':');
+      if (parts.length >= 3 && parts[1] === '802-11-wireless' && parts[2]) return parts[0];
+    }
+  } catch (e) {}
+  return null;
+}
+
+function rollbackWifi(previousSsid) {
+  if (!previousSsid) return;
+  console.log(`[pi] WiFi switch failed, rolling back to "${previousSsid}"`);
+  try {
+    execSync(`sudo nmcli connection up "${previousSsid}" 2>&1`, { encoding: 'utf8', timeout: 30000 });
+    console.log(`[pi] Rolled back to "${previousSsid}"`);
+  } catch (e) {
+    console.log(`[pi] Rollback failed, trying device wifi connect`);
+    try {
+      execSync(`sudo nmcli device wifi connect "${previousSsid}" 2>&1`, { encoding: 'utf8', timeout: 30000 });
+    } catch (e2) {
+      console.log(`[pi] Rollback to "${previousSsid}" also failed`);
+    }
+  }
+}
+
 function addWifiNetwork(ssid, password) {
+  const previousWifi = getCurrentWifi();
+
   // If no password, try activating a saved connection first
   if (!password) {
     try {
@@ -113,8 +142,8 @@ function addWifiNetwork(ssid, password) {
     } catch (e) {
       const msg = e.stderr || e.stdout || e.message || '';
       if (msg.includes('key-mgmt') || msg.includes('property is missing')) {
-        // Broken saved profile - delete it and ask for password
         try { execSync(`sudo nmcli connection delete "${ssid}" 2>/dev/null`, { encoding: 'utf8', timeout: 10000 }); } catch (e2) {}
+        rollbackWifi(previousWifi);
         return { success: false, error: 'need-password' };
       }
     }
@@ -127,20 +156,21 @@ function addWifiNetwork(ssid, password) {
     if (out.includes('successfully activated')) {
       return { success: true };
     }
+    rollbackWifi(previousWifi);
     return { success: false, error: 'Connection failed' };
   } catch (e) {
     const msg = e.stderr || e.stdout || e.message || '';
+    let error = msg.split('\n')[0] || 'Connection failed';
     if (msg.includes('Secrets were required') || msg.includes('No suitable device') || msg.includes('password')) {
-      return { success: false, error: 'Wrong password' };
-    }
-    if (msg.includes('No network with SSID')) {
-      return { success: false, error: 'Network not found' };
-    }
-    if (msg.includes('key-mgmt') || msg.includes('property is missing')) {
+      error = 'Wrong password';
+    } else if (msg.includes('No network with SSID')) {
+      error = 'Network not found';
+    } else if (msg.includes('key-mgmt') || msg.includes('property is missing')) {
       try { execSync(`sudo nmcli connection delete "${ssid}" 2>/dev/null`, { encoding: 'utf8', timeout: 10000 }); } catch (e2) {}
-      return { success: false, error: 'need-password' };
+      error = 'need-password';
     }
-    return { success: false, error: msg.split('\n')[0] || 'Connection failed' };
+    rollbackWifi(previousWifi);
+    return { success: false, error };
   }
 }
 
