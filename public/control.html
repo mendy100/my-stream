@@ -6,6 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#f0f2ff">
 <link rel="manifest" href="/manifest.json">
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <title>Control Panel</title>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -288,22 +289,47 @@
     width: auto;
   }
 
-  .url-chip {
-    font-size: 0.6rem;
+  .url-row {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    margin-top: 0.4rem;
+    padding: 0.35rem 0.5rem;
+    background: #f7f8fc;
+    border-radius: 8px;
+  }
+  .url-tag {
+    font-size: 0.55rem;
     font-weight: 700;
     color: #fff;
-    background: #6366f1;
-    padding: 0.2rem 0.45rem;
-    border-radius: 6px;
-    cursor: pointer;
-    letter-spacing: 0.03em;
-    display: inline-flex;
-    align-items: center;
-    gap: 0.2rem;
+    padding: 0.15rem 0.35rem;
+    border-radius: 4px;
+    letter-spacing: 0.04em;
+    flex-shrink: 0;
   }
-  .url-chip:active { opacity: 0.8; }
-  .url-chip.ivr { background: #059669; }
-  .url-chip .copy-icon { font-size: 0.55rem; opacity: 0.7; }
+  .url-tag.web { background: #6366f1; }
+  .url-tag.ivr { background: #059669; }
+  .url-text {
+    flex: 1;
+    font-size: 0.68rem;
+    color: #666;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .url-copy {
+    background: none;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    padding: 0.2rem 0.45rem;
+    font-size: 0.6rem;
+    color: #888;
+    cursor: pointer;
+    font-weight: 600;
+    width: auto;
+    flex-shrink: 0;
+  }
+  .url-copy:active { background: #eef0ff; color: #4f46e5; border-color: #4f46e5; }
 
   .empty-msg {
     color: #bbb;
@@ -619,11 +645,7 @@
 <div class="card">
   <div class="card-title">
     Raspberry Pi
-    <div style="display:flex;align-items:center;gap:0.5rem">
-      <span class="url-chip" onclick="copyUrl('')" title="Copy listener URL">WEB <span class="copy-icon">&#9776;</span></span>
-      <span class="url-chip ivr" onclick="copyUrl('/stream')" title="Copy IVR URL">IVR <span class="copy-icon">&#9776;</span></span>
-      <div class="dot" id="pi-dot"></div>
-    </div>
+    <div class="dot" id="pi-dot"></div>
   </div>
   <div class="status-text" id="pi-status-text">Checking...</div>
   <div class="status-detail" id="pi-status-detail"></div>
@@ -645,6 +667,8 @@
       <div class="info-value" id="pi-uptime">-</div>
     </div>
   </div>
+  <div class="url-row" id="url-web"></div>
+  <div class="url-row" id="url-ivr"></div>
 </div>
 
 <!-- Listeners -->
@@ -718,8 +742,7 @@
   const wifiConnectPass = document.getElementById('wifi-connect-pass');
   const wifiConnectBtn = document.getElementById('wifi-connect-btn');
 
-  window.copyUrl = function(path) {
-    const url = location.origin + path;
+  function copyUrl(url) {
     navigator.clipboard.writeText(url).then(() => {
       const msg = document.createElement('div');
       msg.textContent = 'Copied!';
@@ -729,7 +752,17 @@
     }).catch(() => {
       prompt('Copy this URL:', url);
     });
-  };
+  }
+  function makeUrlRow(el, tag, tagClass, url) {
+    el.innerHTML = '<span class="url-tag ' + tagClass + '">' + tag + '</span>' +
+      '<span class="url-text">' + url + '</span>' +
+      '<button class="url-copy">Copy</button>';
+    el.querySelector('.url-copy').addEventListener('click', () => copyUrl(url));
+    el.querySelector('.url-text').addEventListener('click', () => window.open(url, '_blank'));
+    el.querySelector('.url-text').style.cursor = 'pointer';
+  }
+  makeUrlRow(document.getElementById('url-web'), 'WEB', 'web', location.origin);
+  makeUrlRow(document.getElementById('url-ivr'), 'IVR', 'ivr', location.origin + '/stream');
 
   let socket = null;
   let isTalking = false;
@@ -834,21 +867,34 @@
     meter.classList.add('active');
     try {
       mediaStream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
-      audioCtx = new AudioContext({ sampleRate: 16000 });
+      audioCtx = new AudioContext();
       const source = audioCtx.createMediaStreamSource(mediaStream);
       const analyser = audioCtx.createAnalyser();
       analyser.fftSize = 256;
       processor = audioCtx.createScriptProcessor(4096, 1, 1);
+      const nativeSR = audioCtx.sampleRate;
       processor.onaudioprocess = (e) => {
         if (!isTalking || !socket) return;
         const input = e.inputBuffer.getChannelData(0);
         e.outputBuffer.getChannelData(0).fill(0);
-        const buf = new Int16Array(input.length);
-        for (let i = 0; i < input.length; i++) {
-          let s = Math.max(-1, Math.min(1, input[i]));
-          buf[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
-        }
-        socket.emit('audio', buf.buffer);
+        // Resample using OfflineAudioContext for clean anti-aliased output
+        const offline = new OfflineAudioContext(1, Math.ceil(input.length * 16000 / nativeSR), 16000);
+        const abuf = offline.createBuffer(1, input.length, nativeSR);
+        abuf.getChannelData(0).set(input);
+        const src = offline.createBufferSource();
+        src.buffer = abuf;
+        src.connect(offline.destination);
+        src.start();
+        offline.startRendering().then((rendered) => {
+          if (!isTalking) return;
+          const data = rendered.getChannelData(0);
+          const buf = new Int16Array(data.length);
+          for (let i = 0; i < data.length; i++) {
+            let s = Math.max(-1, Math.min(1, data[i]));
+            buf[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+          }
+          socket.emit('audio', buf.buffer);
+        });
       };
       source.connect(analyser);
       source.connect(processor);
