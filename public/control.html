@@ -288,6 +288,23 @@
     width: auto;
   }
 
+  .url-chip {
+    font-size: 0.6rem;
+    font-weight: 700;
+    color: #fff;
+    background: #6366f1;
+    padding: 0.2rem 0.45rem;
+    border-radius: 6px;
+    cursor: pointer;
+    letter-spacing: 0.03em;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.2rem;
+  }
+  .url-chip:active { opacity: 0.8; }
+  .url-chip.ivr { background: #059669; }
+  .url-chip .copy-icon { font-size: 0.55rem; opacity: 0.7; }
+
   .empty-msg {
     color: #bbb;
     font-size: 0.8rem;
@@ -485,10 +502,6 @@
 </head>
 <body>
 
-<div style="position:fixed;top:0.6rem;right:3.2rem;display:flex;gap:0.6rem;align-items:center;z-index:100">
-  <a href="/" target="_blank" id="listen-url-top" style="font-size:0.65rem;color:#6366f1;font-weight:600;text-decoration:none">WEB</a>
-  <a href="/stream" target="_blank" id="ivr-url-top" style="font-size:0.65rem;color:#059669;font-weight:600;text-decoration:none">IVR</a>
-</div>
 <button class="settings-toggle" id="settings-toggle">&#9881;</button>
 <div class="settings-overlay" id="settings-overlay"></div>
 <div class="settings-panel" id="settings-panel">
@@ -606,7 +619,11 @@
 <div class="card">
   <div class="card-title">
     Raspberry Pi
-    <div class="dot" id="pi-dot"></div>
+    <div style="display:flex;align-items:center;gap:0.5rem">
+      <span class="url-chip" onclick="copyUrl('')" title="Copy listener URL">WEB <span class="copy-icon">&#9776;</span></span>
+      <span class="url-chip ivr" onclick="copyUrl('/stream')" title="Copy IVR URL">IVR <span class="copy-icon">&#9776;</span></span>
+      <div class="dot" id="pi-dot"></div>
+    </div>
   </div>
   <div class="status-text" id="pi-status-text">Checking...</div>
   <div class="status-detail" id="pi-status-detail"></div>
@@ -701,8 +718,18 @@
   const wifiConnectPass = document.getElementById('wifi-connect-pass');
   const wifiConnectBtn = document.getElementById('wifi-connect-btn');
 
-  document.getElementById('listen-url-top').href = location.origin;
-  document.getElementById('ivr-url-top').href = location.origin + '/stream';
+  window.copyUrl = function(path) {
+    const url = location.origin + path;
+    navigator.clipboard.writeText(url).then(() => {
+      const msg = document.createElement('div');
+      msg.textContent = 'Copied!';
+      msg.style.cssText = 'position:fixed;top:3rem;left:50%;transform:translateX(-50%);background:#333;color:#fff;padding:0.4rem 1rem;border-radius:8px;font-size:0.8rem;font-weight:600;z-index:999';
+      document.body.appendChild(msg);
+      setTimeout(() => msg.remove(), 1500);
+    }).catch(() => {
+      prompt('Copy this URL:', url);
+    });
+  };
 
   let socket = null;
   let isTalking = false;

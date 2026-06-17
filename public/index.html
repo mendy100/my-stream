@@ -138,10 +138,12 @@
     if (b.logoUrl) {
       document.getElementById('logo').innerHTML = '<img src="' + b.logoUrl + '" alt="Logo">';
     }
-    document.documentElement.style.setProperty('--primary', b.primaryColor || '#6366f1');
-    document.documentElement.style.setProperty('--accent', b.accentColor || '#8b5cf6');
-    document.documentElement.style.setProperty('--bg', BGS[b.bgStyle] || BGS.gradient1);
-    document.documentElement.style.setProperty('--font', FONTS[b.font] || FONTS.modern);
+    document.body.style.setProperty('--primary', b.primaryColor || '#6366f1');
+    document.body.style.setProperty('--accent', b.accentColor || '#8b5cf6');
+    document.body.style.setProperty('--bg', BGS[b.bgStyle] || BGS.gradient1);
+    document.body.style.setProperty('--font', FONTS[b.font] || FONTS.modern);
+    document.body.style.background = BGS[b.bgStyle] || BGS.gradient1;
+    document.body.style.fontFamily = FONTS[b.font] || FONTS.modern;
     if (b.bgStyle === 'solid_dark') {
       document.body.style.color = '#e0e0e0';
       document.getElementById('stream-name').style.color = '#fff';
