@@ -576,21 +576,34 @@
         scanList.innerHTML = '<div class="empty-msg">No networks found</div>';
       } else {
         scanList.innerHTML = data.networks.map(n =>
-          '<div class="wifi-item" data-ssid="' + esc(n.ssid) + '">' +
+          '<div class="wifi-item" data-ssid="' + esc(n.ssid) + '" data-open="' + (n.open ? '1' : '0') + '">' +
             '<span class="ssid">' + esc(n.ssid) + '</span>' +
             '<span class="wifi-signal">' + n.signal + '%</span>' +
-            '<span class="wifi-security">' + esc(n.security) + '</span>' +
+            '<span class="wifi-security">' + (n.open ? '<span style="color:#22c55e">Open</span>' : esc(n.security)) + '</span>' +
           '</div>'
         ).join('');
         scanList.querySelectorAll('.wifi-item').forEach(item => {
-          item.addEventListener('click', () => {
-            selectedSsid = item.dataset.ssid;
-            wifiConnectLabel.textContent = 'Connect to ' + selectedSsid;
-            wifiConnectPass.value = '';
-            wifiConnectForm.style.display = 'block';
-            wifiConnectPass.focus();
+          item.addEventListener('click', async () => {
+            const ssid = item.dataset.ssid;
+            // Check if already connected
+            const connBadge = wifiSaved.querySelector('.wifi-connected');
+            if (connBadge && connBadge.parentElement.querySelector('.ssid').textContent === ssid) return;
+
             scanList.querySelectorAll('.wifi-item').forEach(i => i.style.borderColor = 'transparent');
             item.style.borderColor = '#4f46e5';
+
+            if (item.dataset.open === '1') {
+              const origText = item.querySelector('.ssid').textContent;
+              item.querySelector('.ssid').textContent = 'Connecting...';
+              await connectToWifi(ssid, '');
+              item.querySelector('.ssid').textContent = origText;
+            } else {
+              selectedSsid = ssid;
+              wifiConnectLabel.textContent = 'Connect to ' + ssid;
+              wifiConnectPass.value = '';
+              wifiConnectForm.style.display = 'block';
+              wifiConnectPass.focus();
+            }
           });
         });
       }
@@ -600,26 +613,33 @@
     wifiScanBtn.textContent = 'Scan';
   });
 
-  wifiConnectBtn.addEventListener('click', async () => {
-    if (!selectedSsid) return;
-    wifiConnectBtn.textContent = 'Connecting...';
+  async function connectToWifi(ssid, password) {
     try {
       const res = await fetch('/api/wifi', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ssid: selectedSsid, password: wifiConnectPass.value }),
+        body: JSON.stringify({ ssid, password }),
       });
       const data = await res.json();
       if (data.success) {
         wifiConnectForm.style.display = 'none';
         selectedSsid = '';
         loadSavedWifi();
+        return true;
       } else {
         alert(data.error || 'Connection failed');
+        return false;
       }
     } catch (e) {
       alert('Failed to connect');
+      return false;
     }
+  }
+
+  wifiConnectBtn.addEventListener('click', async () => {
+    if (!selectedSsid) return;
+    wifiConnectBtn.textContent = 'Connecting...';
+    await connectToWifi(selectedSsid, wifiConnectPass.value);
     wifiConnectBtn.textContent = 'Connect';
   });
 

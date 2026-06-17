@@ -56,28 +56,39 @@ let piSocket = null;
 
 app.post('/api/wifi', (req, res) => {
   if (!piSocket) return res.status(503).json({ error: 'Pi not connected' });
-  piSocket.emit('add-wifi', req.body, (result) => {
+  piSocket.timeout(30000).emit('add-wifi', req.body, (err, result) => {
+    if (err) return res.json({ success: false, error: 'Timed out' });
     res.json(result);
   });
 });
 
 app.delete('/api/wifi/:ssid', (req, res) => {
   if (!piSocket) return res.status(503).json({ error: 'Pi not connected' });
-  piSocket.emit('remove-wifi', req.params.ssid, (result) => {
+  piSocket.timeout(10000).emit('remove-wifi', req.params.ssid, (err, result) => {
+    if (err) return res.json({ success: false, error: 'Timed out' });
     res.json(result);
   });
 });
 
 app.get('/api/wifi', (req, res) => {
   if (!piSocket) return res.status(503).json({ error: 'Pi not connected' });
-  piSocket.emit('list-wifi', null, (result) => {
+  piSocket.timeout(10000).emit('list-wifi', null, (err, result) => {
+    if (err) return res.json({ networks: [], error: 'Timed out' });
     res.json(result);
   });
 });
 
 app.get('/api/wifi/scan', (req, res) => {
   if (!piSocket) return res.status(503).json({ error: 'Pi not connected' });
-  piSocket.emit('scan-wifi', null, (result) => {
+  let replied = false;
+  const timeout = setTimeout(() => {
+    if (!replied) { replied = true; res.json({ networks: [], error: 'Scan timed out' }); }
+  }, 20000);
+  piSocket.timeout(15000).emit('scan-wifi', null, (err, result) => {
+    clearTimeout(timeout);
+    if (replied) return;
+    replied = true;
+    if (err) return res.json({ networks: [], error: 'Scan timed out' });
     res.json(result);
   });
 });

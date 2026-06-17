@@ -148,7 +148,8 @@ function scanWifiNetworks() {
       const ssid = parts.join(':');
       if (!ssid || ssid === '--' || seen.has(ssid)) continue;
       seen.add(ssid);
-      networks.push({ ssid, signal, security: security || 'Open' });
+      const isOpen = !security || security === '--' || security === '';
+      networks.push({ ssid, signal, security: isOpen ? 'Open' : security, open: isOpen });
     }
     networks.sort((a, b) => b.signal - a.signal);
     return { networks };
