@@ -7,7 +7,7 @@ const app = express();
 const server = createServer(app);
 const io = new Server(server, { maxHttpBufferSize: 1e6 });
 
-app.use(express.json());
+app.use(express.json({ limit: '2mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 
 const BROADCAST_KEY = process.env.BROADCAST_KEY || 'LgPDW26rae8w';

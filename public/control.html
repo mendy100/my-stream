@@ -508,8 +508,19 @@
   </div>
 
   <div class="setting-group">
-    <div class="setting-label">Logo URL</div>
-    <input class="setting-input" id="s-logo" placeholder="https://example.com/logo.png">
+    <div class="setting-label">Logo</div>
+    <div style="display:flex;gap:0.4rem;align-items:center">
+      <div id="s-logo-preview" style="width:44px;height:44px;border-radius:12px;background:#eee;overflow:hidden;flex-shrink:0;display:flex;align-items:center;justify-content:center">
+        <span style="font-size:0.6rem;color:#bbb">None</span>
+      </div>
+      <div style="flex:1">
+        <label style="display:block;padding:0.5rem;font-size:0.8rem;font-weight:600;color:#4f46e5;background:#eef0ff;border-radius:10px;text-align:center;cursor:pointer">
+          Upload Image
+          <input type="file" id="s-logo-file" accept="image/*" style="display:none">
+        </label>
+        <input class="setting-input" id="s-logo" placeholder="or paste URL" style="margin-top:0.3rem;font-size:0.75rem;padding:0.35rem 0.5rem">
+      </div>
+    </div>
   </div>
 
   <div class="setting-group">
@@ -527,11 +538,11 @@
   <div class="setting-group">
     <div class="setting-label">Background Style</div>
     <div class="option-grid">
-      <button class="option-btn active" data-group="bg" data-val="gradient1">Lavender</button>
-      <button class="option-btn" data-group="bg" data-val="gradient2">Rose</button>
-      <button class="option-btn" data-group="bg" data-val="gradient3">Nature</button>
-      <button class="option-btn" data-group="bg" data-val="solid_white">White</button>
-      <button class="option-btn" data-group="bg" data-val="solid_dark">Dark</button>
+      <button class="option-btn active" data-group="bg" data-val="gradient1"><span style="display:inline-block;width:12px;height:12px;border-radius:50%;background:linear-gradient(135deg,#c7d2fe,#e8f4f8);vertical-align:middle;margin-right:3px;border:1px solid #ddd"></span>Lavender</button>
+      <button class="option-btn" data-group="bg" data-val="gradient2"><span style="display:inline-block;width:12px;height:12px;border-radius:50%;background:linear-gradient(135deg,#fce4ec,#e8eaf6);vertical-align:middle;margin-right:3px;border:1px solid #ddd"></span>Rose</button>
+      <button class="option-btn" data-group="bg" data-val="gradient3"><span style="display:inline-block;width:12px;height:12px;border-radius:50%;background:linear-gradient(135deg,#e8f5e9,#fff3e0);vertical-align:middle;margin-right:3px;border:1px solid #ddd"></span>Nature</button>
+      <button class="option-btn" data-group="bg" data-val="solid_white"><span style="display:inline-block;width:12px;height:12px;border-radius:50%;background:#fff;vertical-align:middle;margin-right:3px;border:1px solid #ddd"></span>White</button>
+      <button class="option-btn" data-group="bg" data-val="solid_dark"><span style="display:inline-block;width:12px;height:12px;border-radius:50%;background:#1a1a2e;vertical-align:middle;margin-right:3px;border:1px solid #ddd"></span>Dark</button>
     </div>
   </div>
 
@@ -1036,6 +1047,7 @@
     document.getElementById('s-name').value = b.name || '';
     document.getElementById('s-subtitle').value = b.subtitle || '';
     document.getElementById('s-logo').value = b.logoUrl || '';
+    if (b.logoUrl) updateLogoPreview(b.logoUrl);
     document.getElementById('s-primary').value = b.primaryColor || '#6366f1';
     document.getElementById('s-accent').value = b.accentColor || '#8b5cf6';
     document.getElementById('s-offline').value = b.offlineMessage || '';
@@ -1067,6 +1079,30 @@
   document.getElementById('s-live-badge').addEventListener('click', function() {
     this.classList.toggle('on');
   });
+
+  // Logo upload
+  document.getElementById('s-logo-file').addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    if (file.size > 500000) { alert('Image too large (max 500KB)'); return; }
+    const reader = new FileReader();
+    reader.onload = () => {
+      document.getElementById('s-logo').value = reader.result;
+      updateLogoPreview(reader.result);
+    };
+    reader.readAsDataURL(file);
+  });
+  document.getElementById('s-logo').addEventListener('input', (e) => {
+    updateLogoPreview(e.target.value);
+  });
+  function updateLogoPreview(url) {
+    const preview = document.getElementById('s-logo-preview');
+    if (url) {
+      preview.innerHTML = '<img src="' + url + '" style="width:100%;height:100%;object-fit:cover">';
+    } else {
+      preview.innerHTML = '<span style="font-size:0.6rem;color:#bbb">None</span>';
+    }
+  }
 
   // Color preview
   document.getElementById('s-primary').addEventListener('input', updatePreview);
@@ -1106,9 +1142,7 @@
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data),
       });
-      const saved = document.getElementById('settings-saved');
-      saved.style.display = 'block';
-      setTimeout(() => { saved.style.display = 'none'; }, 2000);
+      closeSettings();
     } catch (e) {
       alert('Failed to save');
     }
