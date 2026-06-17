@@ -79,28 +79,29 @@ function listWifiNetworks() {
     const active = execSync('nmcli -t -f NAME,TYPE,DEVICE connection show --active', { encoding: 'utf8' });
     const activeNames = new Set();
     for (const line of active.trim().split('\n')) {
-      const [name, type] = line.split(':');
+      if (!line) continue;
+      const parts = line.split(':');
+      if (parts.length < 2) continue;
+      const device = parts.pop();
+      const type = parts.pop();
+      const name = parts.join(':');
       if (type === '802-11-wireless') activeNames.add(name);
     }
     const networks = [];
     for (const line of out.trim().split('\n')) {
-      const [name, type] = line.split(':');
+      if (!line) continue;
+      const parts = line.split(':');
+      if (parts.length < 2) continue;
+      const device = parts.pop();
+      const type = parts.pop();
+      const name = parts.join(':');
       if (type === '802-11-wireless') {
         networks.push({ ssid: name, active: activeNames.has(name) });
       }
     }
     return { networks };
   } catch (e) {
-    // Fallback: try wpa_supplicant config
-    try {
-      const conf = execSync('cat /etc/wpa_supplicant/wpa_supplicant.conf 2>/dev/null', { encoding: 'utf8' });
-      const networks = [];
-      const matches = conf.matchAll(/ssid="([^"]+)"/g);
-      for (const m of matches) networks.push({ ssid: m[1], active: false });
-      return { networks };
-    } catch (e2) {
-      return { networks: [], error: 'Could not list networks' };
-    }
+    return { networks: [], error: 'Could not list networks' };
   }
 }
 
