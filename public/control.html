@@ -561,8 +561,9 @@
           item.addEventListener('click', async (e) => {
             if (e.target.classList.contains('wifi-remove')) return;
             item.querySelector('.ssid').textContent = 'Switching...';
-            await connectToWifi(ssid, '');
-            loadSavedWifi();
+            const ok = await connectToWifi(ssid, '', true);
+            if (!ok) item.querySelector('.ssid').textContent = ssid;
+            else loadSavedWifi();
           });
         }
       });
@@ -626,7 +627,7 @@
     wifiScanBtn.textContent = 'Scan';
   });
 
-  async function connectToWifi(ssid, password) {
+  async function connectToWifi(ssid, password, silent) {
     try {
       const res = await fetch('/api/wifi', {
         method: 'POST',
@@ -639,12 +640,19 @@
         selectedSsid = '';
         loadSavedWifi();
         return true;
+      } else if (data.error === 'need-password') {
+        selectedSsid = ssid;
+        wifiConnectLabel.textContent = 'Password needed for ' + ssid;
+        wifiConnectPass.value = '';
+        wifiConnectForm.style.display = 'block';
+        wifiConnectPass.focus();
+        return false;
       } else {
-        alert(data.error || 'Connection failed');
+        if (!silent) alert(data.error || 'Connection failed');
         return false;
       }
     } catch (e) {
-      alert('Failed to connect');
+      if (!silent) alert('Failed to connect');
       return false;
     }
   }

@@ -110,7 +110,14 @@ function addWifiNetwork(ssid, password) {
     try {
       const out = execSync(`sudo nmcli connection up "${ssid}" 2>&1`, { encoding: 'utf8', timeout: 30000 });
       if (out.includes('successfully activated')) return { success: true };
-    } catch (e) {}
+    } catch (e) {
+      const msg = e.stderr || e.stdout || e.message || '';
+      if (msg.includes('key-mgmt') || msg.includes('property is missing')) {
+        // Broken saved profile - delete it and ask for password
+        try { execSync(`sudo nmcli connection delete "${ssid}" 2>/dev/null`, { encoding: 'utf8', timeout: 10000 }); } catch (e2) {}
+        return { success: false, error: 'need-password' };
+      }
+    }
   }
   try {
     const cmd = password
@@ -128,6 +135,10 @@ function addWifiNetwork(ssid, password) {
     }
     if (msg.includes('No network with SSID')) {
       return { success: false, error: 'Network not found' };
+    }
+    if (msg.includes('key-mgmt') || msg.includes('property is missing')) {
+      try { execSync(`sudo nmcli connection delete "${ssid}" 2>/dev/null`, { encoding: 'utf8', timeout: 10000 }); } catch (e2) {}
+      return { success: false, error: 'need-password' };
     }
     return { success: false, error: msg.split('\n')[0] || 'Connection failed' };
   }
