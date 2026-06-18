@@ -14,27 +14,52 @@ if (!BROADCAST_KEY) {
   process.exit(1);
 }
 
-function findUSBDevice() {
-  if (DEVICE) return DEVICE;
+function findAllUSBDevices() {
+  const devices = [];
   try {
     const cards = execSync('cat /proc/asound/cards', { encoding: 'utf8' });
     for (const line of cards.split('\n')) {
       if (line.includes('USB') || line.includes('Scarlett') || line.includes('Focusrite')) {
-        const match = line.match(/^\s*(\d+)/);
-        if (match) return `hw:${match[1]},0`;
+        const match = line.match(/^\s*(\d+)\s*\[(\w+)\s*\]:\s*(.*)/);
+        if (match) {
+          const nextLine = cards.split('\n')[cards.split('\n').indexOf(line) + 1] || '';
+          const name = nextLine.trim() || match[3].trim();
+          devices.push({ id: `hw:${match[1]},0`, card: match[1], shortName: match[2], name });
+        }
       }
     }
   } catch (e) {}
-  return 'hw:1,0';
+  if (DEVICE && devices.length === 0) devices.push({ id: DEVICE, card: '?', shortName: 'Manual', name: DEVICE });
+  return devices;
 }
 
-function stereoToMono(buf) {
-  // S32_LE stereo: 8 bytes per frame (4 bytes per sample × 2 channels)
-  const frames = Math.floor(buf.length / 8);
+function detectFormat(deviceId) {
+  try {
+    execSync(`arecord -D ${deviceId} -f S16_LE -c 2 -r 48000 -d 0 -t raw /dev/null 2>&1`, { encoding: 'utf8', timeout: 3000 });
+    return 'S16_LE';
+  } catch (e) {
+    const msg = e.stderr || e.stdout || e.message || '';
+    if (msg.includes('S32_LE')) return 'S32_LE';
+  }
+  return 'S32_LE';
+}
+
+function stereoToMono(buf, format) {
+  if (format === 'S32_LE') {
+    const frames = Math.floor(buf.length / 8);
+    const out = Buffer.alloc(frames * 2);
+    for (let i = 0; i < frames; i++) {
+      const l = buf.readInt32LE(i * 8) >> 16;
+      const r = buf.readInt32LE(i * 8 + 4) >> 16;
+      out.writeInt16LE(Math.max(-32768, Math.min(32767, Math.round((l + r) / 2))), i * 2);
+    }
+    return out;
+  }
+  const frames = Math.floor(buf.length / 4);
   const out = Buffer.alloc(frames * 2);
   for (let i = 0; i < frames; i++) {
-    const l = buf.readInt32LE(i * 8) >> 16;
-    const r = buf.readInt32LE(i * 8 + 4) >> 16;
+    const l = buf.readInt16LE(i * 4);
+    const r = buf.readInt16LE(i * 4 + 2);
     out.writeInt16LE(Math.max(-32768, Math.min(32767, Math.round((l + r) / 2))), i * 2);
   }
   return out;
@@ -236,10 +261,23 @@ function scanWifiNetworks() {
 }
 
 function start() {
-  const device = findUSBDevice();
-  console.log(`[pi] Device: ${device}`);
+  const allDevices = findAllUSBDevices();
+  console.log(`[pi] Found ${allDevices.length} USB audio device(s)`);
+  allDevices.forEach(d => console.log(`[pi]   ${d.id} - ${d.name}`));
   console.log(`[pi] Server: ${STREAM_URL}`);
   console.log(`[pi] Capture: ${CAPTURE_RATE}Hz -> ${TARGET_RATE}Hz`);
+
+  // Per-device state: { id, name, format, muted, volume, gain, process, buffer }
+  const devices = {};
+  allDevices.forEach(d => {
+    devices[d.id] = {
+      id: d.id, name: d.name, shortName: d.shortName,
+      format: detectFormat(d.id),
+      muted: false, volume: 100, gain: 100,
+      process: null, buffer: Buffer.alloc(0),
+    };
+    console.log(`[pi] ${d.id} format: ${devices[d.id].format}`);
+  });
 
   const socket = io(STREAM_URL, {
     query: { broadcaster: '1', type: 'pi' },
@@ -249,8 +287,8 @@ function start() {
   });
 
   let authenticated = false;
-  let arecord = null;
   let statusInterval = null;
+  let mixInterval = null;
 
   socket.on('connect', () => {
     console.log('[pi] Connected');
@@ -261,7 +299,8 @@ function start() {
     if (data.live) {
       console.log('[pi] LIVE');
       authenticated = true;
-      startCapture();
+      startAllCaptures();
+      startMixer();
       startStatus();
     }
   });
@@ -276,13 +315,33 @@ function start() {
   socket.on('disconnect', (reason) => {
     console.log(`[pi] Disconnected: ${reason}`);
     authenticated = false;
-    stopCapture();
+    stopAllCaptures();
+    stopMixer();
     stopStatus();
   });
 
   socket.on('reconnect', () => {
     console.log('[pi] Reconnected');
     socket.emit('start-broadcast', BROADCAST_KEY);
+  });
+
+  // Device control handlers
+  socket.on('set-device', (data, cb) => {
+    const dev = devices[data.id];
+    if (!dev) { if (cb) cb({ error: 'Unknown device' }); return; }
+    if (data.muted !== undefined) dev.muted = data.muted;
+    if (data.volume !== undefined) dev.volume = Math.max(0, Math.min(200, data.volume));
+    if (data.gain !== undefined) dev.gain = Math.max(0, Math.min(300, data.gain));
+    console.log(`[pi] Device ${dev.shortName}: muted=${dev.muted} vol=${dev.volume} gain=${dev.gain}`);
+    if (cb) cb({ success: true });
+  });
+
+  socket.on('list-devices', (_, cb) => {
+    const list = Object.values(devices).map(d => ({
+      id: d.id, name: d.name, shortName: d.shortName,
+      muted: d.muted, volume: d.volume, gain: d.gain,
+    }));
+    if (cb) cb(list);
   });
 
   // WiFi management handlers
@@ -309,7 +368,15 @@ function start() {
 
   function startStatus() {
     const send = () => {
-      socket.emit('pi-status', { network: getNetworkInfo(), uptime: os.uptime(), device });
+      const deviceList = Object.values(devices).map(d => ({
+        id: d.id, name: d.name, shortName: d.shortName,
+        muted: d.muted, volume: d.volume, gain: d.gain,
+        active: !!d.process,
+      }));
+      socket.emit('pi-status', {
+        network: getNetworkInfo(), uptime: os.uptime(),
+        devices: deviceList, deviceCount: deviceList.length,
+      });
     };
     send();
     statusInterval = setInterval(send, 5000);
@@ -319,35 +386,99 @@ function start() {
     if (statusInterval) { clearInterval(statusInterval); statusInterval = null; }
   }
 
-  function startCapture() {
-    if (arecord) return;
-    const args = ['-D', device, '-f', 'S32_LE', '-c', '2', '-r', String(CAPTURE_RATE), '-t', 'raw', '--buffer-size', '1024'];
-    console.log(`[pi] arecord ${args.join(' ')}`);
-    arecord = spawn('arecord', args);
+  function startCapture(dev) {
+    if (dev.process) return;
+    const args = ['-D', dev.id, '-f', dev.format, '-c', '2', '-r', String(CAPTURE_RATE), '-t', 'raw', '--buffer-size', '1024'];
+    console.log(`[pi] arecord ${dev.shortName}: ${args.join(' ')}`);
+    dev.process = spawn('arecord', args);
 
-    arecord.stdout.on('data', (chunk) => {
+    dev.process.stdout.on('data', (chunk) => {
       if (!authenticated) return;
-      socket.emit('audio', downsample(stereoToMono(chunk), CAPTURE_RATE, TARGET_RATE));
+      const mono = downsample(stereoToMono(chunk, dev.format), CAPTURE_RATE, TARGET_RATE);
+      dev.buffer = Buffer.concat([dev.buffer, mono]);
+      // Prevent buffer from growing too large (max ~1 second of audio)
+      if (dev.buffer.length > TARGET_RATE * 2) {
+        dev.buffer = dev.buffer.slice(dev.buffer.length - TARGET_RATE * 2);
+      }
     });
 
-    arecord.stderr.on('data', (d) => {
+    dev.process.stderr.on('data', (d) => {
       const msg = d.toString().trim();
-      if (msg && !msg.includes('overrun')) console.log(`[arecord] ${msg}`);
+      if (msg && !msg.includes('overrun')) console.log(`[arecord:${dev.shortName}] ${msg}`);
     });
 
-    arecord.on('close', (code) => {
-      console.log(`[pi] arecord exited (${code})`);
-      arecord = null;
-      if (authenticated) setTimeout(startCapture, 2000);
+    dev.process.on('close', (code) => {
+      console.log(`[pi] arecord ${dev.shortName} exited (${code})`);
+      dev.process = null;
+      if (authenticated) setTimeout(() => startCapture(dev), 2000);
     });
   }
 
-  function stopCapture() {
-    if (arecord) { arecord.kill('SIGTERM'); arecord = null; }
+  function startAllCaptures() {
+    Object.values(devices).forEach(d => startCapture(d));
   }
 
-  process.on('SIGINT', () => { socket.emit('stop-broadcast'); stopCapture(); stopStatus(); socket.close(); process.exit(0); });
-  process.on('SIGTERM', () => { socket.emit('stop-broadcast'); stopCapture(); stopStatus(); socket.close(); process.exit(0); });
+  function stopAllCaptures() {
+    Object.values(devices).forEach(d => {
+      if (d.process) { d.process.kill('SIGTERM'); d.process = null; }
+      d.buffer = Buffer.alloc(0);
+    });
+  }
+
+  function startMixer() {
+    if (mixInterval) return;
+    mixInterval = setInterval(() => {
+      if (!authenticated) return;
+      const activeDevs = Object.values(devices).filter(d => d.buffer.length > 0 && !d.muted);
+      if (activeDevs.length === 0) return;
+
+      // Find the smallest buffer size across active devices
+      const minLen = Math.min(...activeDevs.map(d => d.buffer.length));
+      if (minLen < 64) return; // Wait for more data
+
+      // Use minLen aligned to 2 bytes (S16 samples)
+      const chunkLen = minLen - (minLen % 2);
+      const mixed = Buffer.alloc(chunkLen);
+
+      for (let i = 0; i < chunkLen; i += 2) {
+        let sum = 0;
+        for (const dev of activeDevs) {
+          let sample = dev.buffer.readInt16LE(i);
+          sample = Math.round(sample * (dev.volume / 100) * (dev.gain / 100));
+          sum += sample;
+        }
+        mixed.writeInt16LE(Math.max(-32768, Math.min(32767, sum)), i);
+      }
+
+      // Remove consumed bytes from each active device buffer
+      activeDevs.forEach(d => {
+        d.buffer = d.buffer.slice(chunkLen);
+      });
+      // Also drain muted device buffers so they don't accumulate
+      Object.values(devices).forEach(d => {
+        if (d.muted && d.buffer.length > 0) {
+          d.buffer = d.buffer.slice(Math.min(chunkLen, d.buffer.length));
+        }
+      });
+
+      socket.emit('audio', mixed);
+    }, 50);
+  }
+
+  function stopMixer() {
+    if (mixInterval) { clearInterval(mixInterval); mixInterval = null; }
+  }
+
+  function cleanup() {
+    socket.emit('stop-broadcast');
+    stopAllCaptures();
+    stopMixer();
+    stopStatus();
+    socket.close();
+    process.exit(0);
+  }
+  process.on('SIGINT', cleanup);
+  process.on('SIGTERM', cleanup);
 }
 
 start();

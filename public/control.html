@@ -338,6 +338,90 @@
     padding: 0.5rem;
   }
 
+  /* Audio Devices */
+  .device-item {
+    background: #f7f8fc;
+    border-radius: 12px;
+    padding: 0.6rem 0.7rem;
+    margin-bottom: 0.4rem;
+  }
+  .device-header {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 0.4rem;
+  }
+  .device-name {
+    flex: 1;
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: #333;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .device-active {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: #22c55e;
+    flex-shrink: 0;
+  }
+  .device-active.inactive { background: #ccc; }
+  .device-mute {
+    background: none;
+    border: 2px solid #ddd;
+    border-radius: 8px;
+    padding: 0.25rem 0.5rem;
+    font-size: 0.7rem;
+    font-weight: 600;
+    cursor: pointer;
+    color: #666;
+    width: auto;
+    flex-shrink: 0;
+  }
+  .device-mute.muted {
+    background: #fef2f2;
+    border-color: #fca5a5;
+    color: #dc2626;
+  }
+  .device-slider-row {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    margin-top: 0.25rem;
+  }
+  .device-slider-label {
+    font-size: 0.6rem;
+    color: #aaa;
+    text-transform: uppercase;
+    font-weight: 600;
+    width: 28px;
+    flex-shrink: 0;
+  }
+  .device-slider {
+    flex: 1;
+    -webkit-appearance: none;
+    appearance: none;
+    height: 6px;
+    border-radius: 3px;
+    background: #ddd;
+    outline: none;
+  }
+  .device-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 18px; height: 18px;
+    border-radius: 50%;
+    background: #4f46e5;
+    cursor: pointer;
+  }
+  .device-slider-val {
+    font-size: 0.7rem;
+    color: #888;
+    width: 28px;
+    text-align: right;
+    flex-shrink: 0;
+  }
+
   /* Settings sidebar */
   .settings-toggle {
     position: fixed;
@@ -671,6 +755,15 @@
   <div class="url-row" id="url-ivr"></div>
 </div>
 
+<!-- Audio Devices -->
+<div class="card">
+  <div class="card-title">
+    Audio Devices
+    <button class="scan-btn" id="devices-refresh">Refresh</button>
+  </div>
+  <div id="devices-list"><div class="empty-msg">Loading devices...</div></div>
+</div>
+
 <!-- Listeners -->
 <div class="card">
   <div class="card-title">Listeners</div>
@@ -803,7 +896,7 @@
     }
     piDot.className = 'dot green';
     piStatusText.textContent = 'Connected & Streaming';
-    piStatusDetail.textContent = 'Audio: ' + (info.device || 'unknown');
+    piStatusDetail.textContent = 'Audio: ' + (info.deviceCount || 0) + ' device(s)';
     piInfo.style.display = 'grid';
     const net = info.network || {};
     piConnType.textContent = net.type === 'wifi' ? 'WiFi' : net.type === 'ethernet' ? 'Ethernet' : net.type || '-';
@@ -826,6 +919,98 @@
       piStatusDetail.textContent = 'Pi may have lost connection';
     }, 12000);
   }
+
+  // --- Audio Devices ---
+  const devicesList = document.getElementById('devices-list');
+  const devicesRefresh = document.getElementById('devices-refresh');
+  let knownDevices = [];
+
+  function renderDevices(devices) {
+    knownDevices = devices || [];
+    if (!knownDevices.length) {
+      devicesList.innerHTML = '<div class="empty-msg">No audio devices detected</div>';
+      return;
+    }
+    devicesList.innerHTML = knownDevices.map(d => {
+      const mid = d.id.replace(/[^a-zA-Z0-9]/g, '_');
+      return '<div class="device-item" data-did="' + esc(d.id) + '">' +
+        '<div class="device-header">' +
+          '<div class="device-active' + (d.active === false ? ' inactive' : '') + '"></div>' +
+          '<span class="device-name">' + esc(d.name || d.shortName) + '</span>' +
+          '<button class="device-mute' + (d.muted ? ' muted' : '') + '" id="mute-' + mid + '">' + (d.muted ? 'Muted' : 'On') + '</button>' +
+        '</div>' +
+        '<div class="device-slider-row">' +
+          '<span class="device-slider-label">Vol</span>' +
+          '<input type="range" class="device-slider" id="vol-' + mid + '" min="0" max="200" value="' + (d.volume || 100) + '">' +
+          '<span class="device-slider-val" id="vol-val-' + mid + '">' + (d.volume || 100) + '</span>' +
+        '</div>' +
+        '<div class="device-slider-row">' +
+          '<span class="device-slider-label">Gain</span>' +
+          '<input type="range" class="device-slider" id="gain-' + mid + '" min="0" max="300" value="' + (d.gain || 100) + '">' +
+          '<span class="device-slider-val" id="gain-val-' + mid + '">' + (d.gain || 100) + '</span>' +
+        '</div>' +
+      '</div>';
+    }).join('');
+
+    knownDevices.forEach(d => {
+      const mid = d.id.replace(/[^a-zA-Z0-9]/g, '_');
+      const muteBtn = document.getElementById('mute-' + mid);
+      const volSlider = document.getElementById('vol-' + mid);
+      const gainSlider = document.getElementById('gain-' + mid);
+      const volVal = document.getElementById('vol-val-' + mid);
+      const gainVal = document.getElementById('gain-val-' + mid);
+
+      muteBtn.addEventListener('click', async () => {
+        const muted = !muteBtn.classList.contains('muted');
+        muteBtn.classList.toggle('muted', muted);
+        muteBtn.textContent = muted ? 'Muted' : 'On';
+        await fetch('/api/devices/' + encodeURIComponent(d.id), {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ muted }),
+        });
+      });
+
+      let volTimeout;
+      volSlider.addEventListener('input', () => {
+        volVal.textContent = volSlider.value;
+        clearTimeout(volTimeout);
+        volTimeout = setTimeout(() => {
+          fetch('/api/devices/' + encodeURIComponent(d.id), {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ volume: parseInt(volSlider.value) }),
+          });
+        }, 150);
+      });
+
+      let gainTimeout;
+      gainSlider.addEventListener('input', () => {
+        gainVal.textContent = gainSlider.value;
+        clearTimeout(gainTimeout);
+        gainTimeout = setTimeout(() => {
+          fetch('/api/devices/' + encodeURIComponent(d.id), {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ gain: parseInt(gainSlider.value) }),
+          });
+        }, 150);
+      });
+    });
+  }
+
+  async function loadDevices() {
+    try {
+      const res = await fetch('/api/devices');
+      if (res.ok) renderDevices(await res.json());
+    } catch (e) {}
+  }
+
+  devicesRefresh.addEventListener('click', loadDevices);
+
+  // Update devices from pi-status
+  socket.on('pi-status', (info) => {
+    if (info && info.devices) renderDevices(info.devices);
+  });
+
+  setTimeout(loadDevices, 1500);
 
   // --- Listen ---
   listenBtn.addEventListener('touchstart', startListening, { passive: true });

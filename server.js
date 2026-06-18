@@ -99,6 +99,24 @@ app.get('/api/wifi', (req, res) => {
   });
 });
 
+// Device control API (relayed to Pi)
+app.get('/api/devices', (req, res) => {
+  if (!piSocket) return res.status(503).json({ error: 'Pi not connected' });
+  piSocket.timeout(10000).emit('list-devices', null, (err, result) => {
+    if (err) return res.json([]);
+    res.json(result);
+  });
+});
+
+app.post('/api/devices/:id', (req, res) => {
+  if (!piSocket) return res.status(503).json({ error: 'Pi not connected' });
+  const payload = { id: req.params.id, ...req.body };
+  piSocket.timeout(10000).emit('set-device', payload, (err, result) => {
+    if (err) return res.json({ error: 'Timed out' });
+    res.json(result);
+  });
+});
+
 app.get('/api/wifi/scan', (req, res) => {
   if (!piSocket) return res.status(503).json({ error: 'Pi not connected' });
   let replied = false;
