@@ -34,18 +34,24 @@ function findAllUSBDevices() {
 }
 
 function detectFormat(deviceId) {
-  let info = '';
-  try {
-    info = execSync(`arecord -D ${deviceId} --dump-hw-params -d 1 -f S16_LE -c 2 -r 48000 -t raw /dev/null 2>&1`, { encoding: 'utf8', timeout: 5000 });
-  } catch (e) {
-    info = (e.stderr || '') + (e.stdout || '') + (e.message || '');
+  // Try S16_LE stereo first
+  for (const fmt of ['S16_LE', 'S32_LE']) {
+    for (const ch of [2, 1]) {
+      try {
+        execSync(`timeout 2 arecord -D ${deviceId} -f ${fmt} -c ${ch} -r 48000 -d 1 -t raw /dev/null 2>&1`, { encoding: 'utf8', timeout: 5000 });
+        console.log(`[detect] ${deviceId}: ${fmt} ${ch}ch OK`);
+        return { format: fmt, channels: ch };
+      } catch (e) {
+        const msg = (e.stderr || '') + (e.stdout || '') + (e.message || '');
+        if (msg.includes('Recording raw data') || msg.includes('stdin')) {
+          console.log(`[detect] ${deviceId}: ${fmt} ${ch}ch OK (from stderr)`);
+          return { format: fmt, channels: ch };
+        }
+      }
+    }
   }
-  // Kill any leftover arecord for this device
-  try { execSync(`pkill -f "arecord -D ${deviceId}" 2>/dev/null || true`, { timeout: 2000 }); } catch (e) {}
-
-  const format = info.includes('S16_LE') ? 'S16_LE' : 'S32_LE';
-  const channels = info.includes('CHANNELS: 1') || (info.includes('Channels count non available') && !info.includes('CHANNELS: 2')) ? 1 : 2;
-  return { format, channels };
+  console.log(`[detect] ${deviceId}: falling back to S32_LE 2ch`);
+  return { format: 'S32_LE', channels: 2 };
 }
 
 function toMono16(buf, format, channels) {
