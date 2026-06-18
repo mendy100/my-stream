@@ -34,29 +34,30 @@ function findAllUSBDevices() {
 }
 
 function detectFormat(deviceId) {
-  for (const fmt of ['S16_LE', 'S32_LE']) {
-    for (const ch of [2, 1]) {
-      try {
-        const out = execSync(`arecord -D ${deviceId} -f ${fmt} -c ${ch} -r 48000 -d 1 -t raw /dev/null 2>&1 || true`, { encoding: 'utf8', timeout: 5000 });
-        if (out.includes('Recording raw data') || out.includes('Signed')) {
-          console.log(`[detect] ${deviceId}: ${fmt} ${ch}ch OK`);
-          try { execSync(`pkill -f "arecord -D ${deviceId}" 2>/dev/null || true`, { timeout: 2000 }); } catch (e) {}
-          return { format: fmt, channels: ch };
+  const plugId = deviceId.replace('hw:', 'plughw:');
+  for (const dev of [deviceId, plugId]) {
+    for (const fmt of ['S16_LE', 'S32_LE']) {
+      for (const ch of [2, 1]) {
+        try {
+          const out = execSync(`arecord -D ${dev} -f ${fmt} -c ${ch} -r 48000 -d 1 -t raw /dev/null 2>&1 || true`, { encoding: 'utf8', timeout: 5000 });
+          if (out.includes('Recording raw data') || out.includes('Signed')) {
+            console.log(`[detect] ${deviceId}: ${dev} ${fmt} ${ch}ch OK`);
+            try { execSync(`pkill -f "arecord.*${deviceId.replace('hw:', '')}" 2>/dev/null || true`, { timeout: 2000 }); } catch (e) {}
+            return { format: fmt, channels: ch, deviceId: dev };
+          }
+        } catch (e) {
+          const msg = (e.stderr || '') + (e.stdout || '') + (e.message || '');
+          if (msg.includes('Recording raw data') || msg.includes('Signed')) {
+            console.log(`[detect] ${deviceId}: ${dev} ${fmt} ${ch}ch OK (from catch)`);
+            try { execSync(`pkill -f "arecord.*${deviceId.replace('hw:', '')}" 2>/dev/null || true`, { timeout: 2000 }); } catch (e2) {}
+            return { format: fmt, channels: ch, deviceId: dev };
+          }
         }
-        console.log(`[detect] ${deviceId}: ${fmt} ${ch}ch failed: ${out.trim().split('\n').pop()}`);
-      } catch (e) {
-        const msg = (e.stderr || '') + (e.stdout || '') + (e.message || '');
-        if (msg.includes('Recording raw data') || msg.includes('Signed')) {
-          console.log(`[detect] ${deviceId}: ${fmt} ${ch}ch OK (from catch)`);
-          try { execSync(`pkill -f "arecord -D ${deviceId}" 2>/dev/null || true`, { timeout: 2000 }); } catch (e2) {}
-          return { format: fmt, channels: ch };
-        }
-        console.log(`[detect] ${deviceId}: ${fmt} ${ch}ch error: ${msg.trim().split('\n').pop()}`);
       }
     }
   }
-  console.log(`[detect] ${deviceId}: all combos failed, falling back to S32_LE 2ch`);
-  return { format: 'S32_LE', channels: 2 };
+  console.log(`[detect] ${deviceId}: all combos failed, falling back to plughw S32_LE 2ch`);
+  return { format: 'S32_LE', channels: 2, deviceId: plugId };
 }
 
 function toMono16(buf, format, channels) {
@@ -296,12 +297,12 @@ function start() {
   for (const d of allDevices) {
     const detected = detectFormat(d.id);
     devices[d.id] = {
-      id: d.id, name: d.name, shortName: d.shortName,
-      ...detected,
+      id: d.id, captureId: detected.deviceId, name: d.name, shortName: d.shortName,
+      format: detected.format, channels: detected.channels,
       muted: false, volume: 100, gain: 100,
       process: null, buffer: Buffer.alloc(0),
     };
-    console.log(`[pi] ${d.id} format: ${detected.format} channels: ${detected.channels}`);
+    console.log(`[pi] ${d.id} -> ${detected.deviceId} format: ${detected.format} channels: ${detected.channels}`);
   }
   // Wait for any leftover arecord processes from detection to fully exit
   try { execSync('sleep 1'); } catch (e) {}
@@ -415,7 +416,7 @@ function start() {
 
   function startCapture(dev) {
     if (dev.process) return;
-    const args = ['-D', dev.id, '-f', dev.format, '-c', String(dev.channels), '-r', String(CAPTURE_RATE), '-t', 'raw', '--buffer-size', '1024'];
+    const args = ['-D', dev.captureId, '-f', dev.format, '-c', String(dev.channels), '-r', String(CAPTURE_RATE), '-t', 'raw', '--buffer-size', '1024'];
     console.log(`[pi] arecord ${dev.shortName}: ${args.join(' ')}`);
     dev.process = spawn('arecord', args);
 
