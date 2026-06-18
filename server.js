@@ -162,7 +162,7 @@ io.on('connection', (socket) => {
     if (state.streamListeners.length > 0) {
       const amp = Buffer.alloc(buf.length);
       for (let i = 0; i < buf.length - 1; i += 2) {
-        const sample = Math.max(-32768, Math.min(32767, buf.readInt16LE(i) * 3));
+        const sample = Math.max(-32768, Math.min(32767, buf.readInt16LE(i) * 6));
         amp.writeInt16LE(sample, i);
       }
       state.streamListeners.forEach(res => {
