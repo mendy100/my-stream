@@ -158,9 +158,17 @@ io.on('connection', (socket) => {
   socket.on('audio', (data) => {
     if (!socket.isBroadcaster) return;
     const buf = Buffer.from(data);
-    state.streamListeners.forEach(res => {
-      try { res.write(buf); } catch (e) {}
-    });
+    // Amplify for IVR/stream listeners (3x gain)
+    if (state.streamListeners.length > 0) {
+      const amp = Buffer.alloc(buf.length);
+      for (let i = 0; i < buf.length - 1; i += 2) {
+        const sample = Math.max(-32768, Math.min(32767, buf.readInt16LE(i) * 3));
+        amp.writeInt16LE(sample, i);
+      }
+      state.streamListeners.forEach(res => {
+        try { res.write(amp); } catch (e) {}
+      });
+    }
     socket.broadcast.emit('audio', data);
   });
 

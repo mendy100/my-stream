@@ -775,11 +775,11 @@
 <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.7rem;margin-bottom:0.7rem">
   <div class="card" style="margin-bottom:0">
     <div class="card-title">Monitor</div>
-    <button class="listen-btn" id="listen-btn">Hold to Listen</button>
+    <button class="listen-btn" id="listen-btn">Listen</button>
   </div>
   <div class="card" style="margin-bottom:0">
     <div class="card-title">Talk</div>
-    <button class="talk-btn" id="talk-btn">Hold to Talk</button>
+    <button class="talk-btn" id="talk-btn">Talk</button>
     <div class="meter" id="meter">
       <div class="meter-bar" id="meter-bar"></div>
     </div>
@@ -1034,37 +1034,27 @@
 
   setTimeout(loadDevices, 1500);
 
-  // --- Listen ---
-  listenBtn.addEventListener('touchstart', startListening, { passive: true });
-  listenBtn.addEventListener('touchend', stopListening);
-  listenBtn.addEventListener('touchcancel', stopListening);
-  listenBtn.addEventListener('mousedown', startListening);
-  listenBtn.addEventListener('mouseup', stopListening);
-  listenBtn.addEventListener('mouseleave', stopListening);
+  // --- Listen (toggle) ---
+  listenBtn.addEventListener('click', () => {
+    if (!isListening) {
+      audioPlayer = new Audio('/stream');
+      audioPlayer.play().catch(() => {});
+      isListening = true;
+      listenBtn.textContent = 'Listening...';
+      listenBtn.classList.add('playing');
+    } else {
+      if (audioPlayer) { audioPlayer.pause(); audioPlayer.src = ''; audioPlayer = null; }
+      isListening = false;
+      listenBtn.textContent = 'Listen';
+      listenBtn.classList.remove('playing');
+    }
+  });
 
-  function startListening() {
-    if (isListening) return;
-    audioPlayer = new Audio('/stream');
-    audioPlayer.play().catch(() => {});
-    isListening = true;
-    listenBtn.textContent = 'Listening...';
-    listenBtn.classList.add('playing');
-  }
-  function stopListening() {
-    if (!isListening) return;
-    if (audioPlayer) { audioPlayer.pause(); audioPlayer.src = ''; audioPlayer = null; }
-    isListening = false;
-    listenBtn.textContent = 'Hold to Listen';
-    listenBtn.classList.remove('playing');
-  }
-
-  // --- Talk ---
-  talkBtn.addEventListener('touchstart', startTalking, { passive: true });
-  talkBtn.addEventListener('touchend', stopTalking);
-  talkBtn.addEventListener('touchcancel', stopTalking);
-  talkBtn.addEventListener('mousedown', startTalking);
-  talkBtn.addEventListener('mouseup', stopTalking);
-  talkBtn.addEventListener('mouseleave', stopTalking);
+  // --- Talk (toggle) ---
+  talkBtn.addEventListener('click', () => {
+    if (!isTalking) startTalking();
+    else stopTalking();
+  });
 
   async function startTalking() {
     if (isTalking) return;
@@ -1073,35 +1063,22 @@
     talkBtn.textContent = 'Talking...';
     meter.classList.add('active');
     try {
-      mediaStream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
-      audioCtx = new AudioContext();
+      mediaStream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true, sampleRate: 16000 } });
+      audioCtx = new AudioContext({ sampleRate: 16000 });
       const source = audioCtx.createMediaStreamSource(mediaStream);
       const analyser = audioCtx.createAnalyser();
       analyser.fftSize = 256;
       processor = audioCtx.createScriptProcessor(4096, 1, 1);
-      const nativeSR = audioCtx.sampleRate;
       processor.onaudioprocess = (e) => {
         if (!isTalking || !socket) return;
         const input = e.inputBuffer.getChannelData(0);
         e.outputBuffer.getChannelData(0).fill(0);
-        // Resample using OfflineAudioContext for clean anti-aliased output
-        const offline = new OfflineAudioContext(1, Math.ceil(input.length * 16000 / nativeSR), 16000);
-        const abuf = offline.createBuffer(1, input.length, nativeSR);
-        abuf.getChannelData(0).set(input);
-        const src = offline.createBufferSource();
-        src.buffer = abuf;
-        src.connect(offline.destination);
-        src.start();
-        offline.startRendering().then((rendered) => {
-          if (!isTalking) return;
-          const data = rendered.getChannelData(0);
-          const buf = new Int16Array(data.length);
-          for (let i = 0; i < data.length; i++) {
-            let s = Math.max(-1, Math.min(1, data[i]));
-            buf[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
-          }
-          socket.emit('audio', buf.buffer);
-        });
+        const buf = new Int16Array(input.length);
+        for (let i = 0; i < input.length; i++) {
+          let s = Math.max(-1, Math.min(1, input[i]));
+          buf[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+        }
+        socket.emit('audio', buf.buffer);
       };
       source.connect(analyser);
       source.connect(processor);
@@ -1128,7 +1105,7 @@
     if (!isTalking) return;
     isTalking = false;
     talkBtn.classList.remove('talking');
-    talkBtn.textContent = 'Hold to Talk';
+    talkBtn.textContent = 'Talk';
     meter.classList.remove('active');
     if (processor) { processor.disconnect(); processor = null; }
     if (audioCtx) { audioCtx.close(); audioCtx = null; }
