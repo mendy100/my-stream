@@ -33,29 +33,40 @@ function findAllUSBDevices() {
   return devices;
 }
 
+function killAllArecord() {
+  try { execSync('killall arecord 2>/dev/null || true', { timeout: 3000 }); } catch (e) {}
+  try { execSync('sleep 1'); } catch (e) {}
+}
+
 function detectFormat(deviceId) {
   const plugId = deviceId.replace('hw:', 'plughw:');
+  const combos = [];
   for (const dev of [deviceId, plugId]) {
     for (const fmt of ['S16_LE', 'S32_LE']) {
       for (const ch of [2, 1]) {
-        try {
-          const out = execSync(`arecord -D ${dev} -f ${fmt} -c ${ch} -r 48000 -d 1 -t raw /dev/null 2>&1 || true`, { encoding: 'utf8', timeout: 5000 });
-          if (out.includes('Recording raw data') || out.includes('Signed')) {
-            console.log(`[detect] ${deviceId}: ${dev} ${fmt} ${ch}ch OK`);
-            try { execSync(`pkill -f "arecord.*${deviceId.replace('hw:', '')}" 2>/dev/null || true`, { timeout: 2000 }); } catch (e) {}
-            return { format: fmt, channels: ch, deviceId: dev };
-          }
-        } catch (e) {
-          const msg = (e.stderr || '') + (e.stdout || '') + (e.message || '');
-          if (msg.includes('Recording raw data') || msg.includes('Signed')) {
-            console.log(`[detect] ${deviceId}: ${dev} ${fmt} ${ch}ch OK (from catch)`);
-            try { execSync(`pkill -f "arecord.*${deviceId.replace('hw:', '')}" 2>/dev/null || true`, { timeout: 2000 }); } catch (e2) {}
-            return { format: fmt, channels: ch, deviceId: dev };
-          }
-        }
+        combos.push({ dev, fmt, ch });
       }
     }
   }
+  for (const { dev, fmt, ch } of combos) {
+    killAllArecord();
+    try {
+      const out = execSync(`arecord -D ${dev} -f ${fmt} -c ${ch} -r 48000 -d 1 -t raw /dev/null 2>&1 || true`, { encoding: 'utf8', timeout: 5000 });
+      if (out.includes('Recording raw data') || out.includes('Signed')) {
+        console.log(`[detect] ${deviceId}: ${dev} ${fmt} ${ch}ch OK`);
+        killAllArecord();
+        return { format: fmt, channels: ch, deviceId: dev };
+      }
+    } catch (e) {
+      const msg = (e.stderr || '') + (e.stdout || '') + (e.message || '');
+      if (msg.includes('Recording raw data') || msg.includes('Signed')) {
+        console.log(`[detect] ${deviceId}: ${dev} ${fmt} ${ch}ch OK (from catch)`);
+        killAllArecord();
+        return { format: fmt, channels: ch, deviceId: dev };
+      }
+    }
+  }
+  killAllArecord();
   console.log(`[detect] ${deviceId}: all combos failed, falling back to plughw S32_LE 2ch`);
   return { format: 'S32_LE', channels: 2, deviceId: plugId };
 }
@@ -304,8 +315,7 @@ function start() {
     };
     console.log(`[pi] ${d.id} -> ${detected.deviceId} format: ${detected.format} channels: ${detected.channels}`);
   }
-  // Wait for any leftover arecord processes from detection to fully exit
-  try { execSync('sleep 1'); } catch (e) {}
+  killAllArecord();
 
   const socket = io(STREAM_URL, {
     query: { broadcaster: '1', type: 'pi' },
@@ -396,9 +406,23 @@ function start() {
 
   function scanForNewDevices() {
     const current = findAllUSBDevices();
-    for (const d of current) {
-      if (!devices[d.id]) {
-        console.log(`[pi] New device detected: ${d.id} - ${d.name}`);
+    const newDevices = current.filter(d => !devices[d.id]);
+    const currentIds = new Set(current.map(d => d.id));
+    const removedIds = Object.keys(devices).filter(id => !currentIds.has(id));
+
+    // Clean up removed devices
+    for (const id of removedIds) {
+      console.log(`[pi] Device removed: ${id} - ${devices[id].name}`);
+      if (devices[id].process) { devices[id].process.kill('SIGTERM'); }
+      delete devices[id];
+    }
+
+    if (newDevices.length > 0) {
+      // Must stop all captures before detection (killAllArecord)
+      console.log(`[pi] ${newDevices.length} new device(s), stopping captures for detection...`);
+      stopAllCaptures();
+      for (const d of newDevices) {
+        console.log(`[pi] New device: ${d.id} - ${d.name}`);
         const detected = detectFormat(d.id);
         devices[d.id] = {
           id: d.id, captureId: detected.deviceId, name: d.name, shortName: d.shortName,
@@ -407,16 +431,9 @@ function start() {
           process: null, buffer: Buffer.alloc(0),
         };
         console.log(`[pi] ${d.id} -> ${detected.deviceId} format: ${detected.format} channels: ${detected.channels}`);
-        if (authenticated) startCapture(devices[d.id]);
       }
-    }
-    const currentIds = new Set(current.map(d => d.id));
-    for (const id of Object.keys(devices)) {
-      if (!currentIds.has(id)) {
-        console.log(`[pi] Device removed: ${id} - ${devices[id].name}`);
-        if (devices[id].process) { devices[id].process.kill('SIGTERM'); }
-        delete devices[id];
-      }
+      // Restart all captures
+      if (authenticated) startAllCaptures();
     }
   }
 
