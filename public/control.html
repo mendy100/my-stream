@@ -923,95 +923,113 @@
   // --- Audio Devices ---
   const devicesList = document.getElementById('devices-list');
   const devicesRefresh = document.getElementById('devices-refresh');
-  let knownDevices = [];
-  let deviceActionTime = 0;
+  let renderedDeviceIds = new Set();
+  let deviceState = {};
 
-  function renderDevices(devices) {
-    knownDevices = devices || [];
-    if (!knownDevices.length) {
-      devicesList.innerHTML = '<div class="empty-msg">No audio devices detected</div>';
+  function ensureDevice(d) {
+    const mid = d.id.replace(/[^a-zA-Z0-9]/g, '_');
+    if (renderedDeviceIds.has(d.id)) {
+      const dot = document.getElementById('dot-' + mid);
+      if (dot) dot.className = 'device-active' + (d.active === false ? ' inactive' : '');
       return;
     }
-    devicesList.innerHTML = knownDevices.map(d => {
-      const mid = d.id.replace(/[^a-zA-Z0-9]/g, '_');
-      return '<div class="device-item" data-did="' + esc(d.id) + '">' +
-        '<div class="device-header">' +
-          '<div class="device-active' + (d.active === false ? ' inactive' : '') + '"></div>' +
-          '<span class="device-name">' + esc(d.name || d.shortName) + '</span>' +
-          '<button class="device-mute' + (d.muted ? ' muted' : '') + '" id="mute-' + mid + '">' + (d.muted ? 'Muted' : 'On') + '</button>' +
-        '</div>' +
-        '<div class="device-slider-row">' +
-          '<span class="device-slider-label">Vol</span>' +
-          '<input type="range" class="device-slider" id="vol-' + mid + '" min="0" max="200" value="' + (d.volume || 100) + '">' +
-          '<span class="device-slider-val" id="vol-val-' + mid + '">' + (d.volume || 100) + '</span>' +
-        '</div>' +
-        '<div class="device-slider-row">' +
-          '<span class="device-slider-label">Gain</span>' +
-          '<input type="range" class="device-slider" id="gain-' + mid + '" min="0" max="300" value="' + (d.gain || 100) + '">' +
-          '<span class="device-slider-val" id="gain-val-' + mid + '">' + (d.gain || 100) + '</span>' +
-        '</div>' +
+    renderedDeviceIds.add(d.id);
+    deviceState[d.id] = { muted: d.muted || false, volume: d.volume || 100, gain: d.gain || 100 };
+
+    const empty = devicesList.querySelector('.empty-msg');
+    if (empty) empty.remove();
+
+    const div = document.createElement('div');
+    div.className = 'device-item';
+    div.dataset.did = d.id;
+    div.innerHTML =
+      '<div class="device-header">' +
+        '<div class="device-active' + (d.active === false ? ' inactive' : '') + '" id="dot-' + mid + '"></div>' +
+        '<span class="device-name">' + esc(d.name || d.shortName) + '</span>' +
+        '<button class="device-mute" id="mute-' + mid + '">On</button>' +
+      '</div>' +
+      '<div class="device-slider-row">' +
+        '<span class="device-slider-label">Vol</span>' +
+        '<input type="range" class="device-slider" id="vol-' + mid + '" min="0" max="200" value="100">' +
+        '<span class="device-slider-val" id="vol-val-' + mid + '">100</span>' +
+      '</div>' +
+      '<div class="device-slider-row">' +
+        '<span class="device-slider-label">Gain</span>' +
+        '<input type="range" class="device-slider" id="gain-' + mid + '" min="0" max="300" value="100">' +
+        '<span class="device-slider-val" id="gain-val-' + mid + '">100</span>' +
       '</div>';
-    }).join('');
+    devicesList.appendChild(div);
 
-    knownDevices.forEach(d => {
-      const mid = d.id.replace(/[^a-zA-Z0-9]/g, '_');
-      const muteBtn = document.getElementById('mute-' + mid);
-      const volSlider = document.getElementById('vol-' + mid);
-      const gainSlider = document.getElementById('gain-' + mid);
-      const volVal = document.getElementById('vol-val-' + mid);
-      const gainVal = document.getElementById('gain-val-' + mid);
+    const muteBtn = document.getElementById('mute-' + mid);
+    const volSlider = document.getElementById('vol-' + mid);
+    const gainSlider = document.getElementById('gain-' + mid);
+    const volVal = document.getElementById('vol-val-' + mid);
+    const gainVal = document.getElementById('gain-val-' + mid);
 
-      muteBtn.addEventListener('click', async () => {
-        deviceActionTime = Date.now();
-        const muted = !muteBtn.classList.contains('muted');
-        muteBtn.classList.toggle('muted', muted);
-        muteBtn.textContent = muted ? 'Muted' : 'On';
-        await fetch('/api/devices/' + encodeURIComponent(d.id), {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ muted }),
-        });
-      });
-
-      let volTimeout;
-      volSlider.addEventListener('input', () => {
-        deviceActionTime = Date.now();
-        volVal.textContent = volSlider.value;
-        clearTimeout(volTimeout);
-        volTimeout = setTimeout(() => {
-          fetch('/api/devices/' + encodeURIComponent(d.id), {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ volume: parseInt(volSlider.value) }),
-          });
-        }, 150);
-      });
-
-      let gainTimeout;
-      gainSlider.addEventListener('input', () => {
-        deviceActionTime = Date.now();
-        gainVal.textContent = gainSlider.value;
-        clearTimeout(gainTimeout);
-        gainTimeout = setTimeout(() => {
-          fetch('/api/devices/' + encodeURIComponent(d.id), {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ gain: parseInt(gainSlider.value) }),
-          });
-        }, 150);
+    muteBtn.addEventListener('click', () => {
+      const st = deviceState[d.id];
+      st.muted = !st.muted;
+      muteBtn.classList.toggle('muted', st.muted);
+      muteBtn.textContent = st.muted ? 'Muted' : 'On';
+      fetch('/api/devices/' + encodeURIComponent(d.id), {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ muted: st.muted }),
       });
     });
+
+    let volTimeout;
+    volSlider.addEventListener('input', () => {
+      deviceState[d.id].volume = parseInt(volSlider.value);
+      volVal.textContent = volSlider.value;
+      clearTimeout(volTimeout);
+      volTimeout = setTimeout(() => {
+        fetch('/api/devices/' + encodeURIComponent(d.id), {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ volume: parseInt(volSlider.value) }),
+        });
+      }, 150);
+    });
+
+    let gainTimeout;
+    gainSlider.addEventListener('input', () => {
+      deviceState[d.id].gain = parseInt(gainSlider.value);
+      gainVal.textContent = gainSlider.value;
+      clearTimeout(gainTimeout);
+      gainTimeout = setTimeout(() => {
+        fetch('/api/devices/' + encodeURIComponent(d.id), {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ gain: parseInt(gainSlider.value) }),
+        });
+      }, 150);
+    });
+  }
+
+  function updateDevices(devices) {
+    if (!devices || !devices.length) {
+      if (!renderedDeviceIds.size) {
+        devicesList.innerHTML = '<div class="empty-msg">No audio devices detected</div>';
+      }
+      return;
+    }
+    devices.forEach(d => ensureDevice(d));
   }
 
   async function loadDevices() {
     try {
       const res = await fetch('/api/devices');
-      if (res.ok) renderDevices(await res.json());
+      if (res.ok) updateDevices(await res.json());
     } catch (e) {}
   }
 
-  devicesRefresh.addEventListener('click', loadDevices);
+  devicesRefresh.addEventListener('click', () => {
+    renderedDeviceIds = new Set();
+    deviceState = {};
+    devicesList.innerHTML = '<div class="empty-msg">Loading devices...</div>';
+    loadDevices();
+  });
 
-  // Update devices from pi-status (skip if user acted recently)
   socket.on('pi-status', (info) => {
-    if (info && info.devices && Date.now() - deviceActionTime > 3000) renderDevices(info.devices);
+    if (info && info.devices) updateDevices(info.devices);
   });
 
   setTimeout(loadDevices, 1500);
