@@ -34,17 +34,29 @@ function findAllUSBDevices() {
 }
 
 function detectFormat(deviceId) {
+  let info = '';
   try {
-    execSync(`arecord -D ${deviceId} -f S16_LE -c 2 -r 48000 -d 0 -t raw /dev/null 2>&1`, { encoding: 'utf8', timeout: 3000 });
-    return 'S16_LE';
+    info = execSync(`arecord -D ${deviceId} --dump-hw-params -d 1 -f S16_LE -c 2 -r 48000 -t raw /dev/null 2>&1`, { encoding: 'utf8', timeout: 5000 });
   } catch (e) {
-    const msg = e.stderr || e.stdout || e.message || '';
-    if (msg.includes('S32_LE')) return 'S32_LE';
+    info = (e.stderr || '') + (e.stdout || '') + (e.message || '');
   }
-  return 'S32_LE';
+  // Kill any leftover arecord for this device
+  try { execSync(`pkill -f "arecord -D ${deviceId}" 2>/dev/null || true`, { timeout: 2000 }); } catch (e) {}
+
+  const format = info.includes('S16_LE') ? 'S16_LE' : 'S32_LE';
+  const channels = info.includes('CHANNELS: 1') || (info.includes('Channels count non available') && !info.includes('CHANNELS: 2')) ? 1 : 2;
+  return { format, channels };
 }
 
-function stereoToMono(buf, format) {
+function toMono16(buf, format, channels) {
+  if (format === 'S32_LE' && channels === 1) {
+    const frames = Math.floor(buf.length / 4);
+    const out = Buffer.alloc(frames * 2);
+    for (let i = 0; i < frames; i++) {
+      out.writeInt16LE(Math.max(-32768, Math.min(32767, buf.readInt32LE(i * 4) >> 16)), i * 2);
+    }
+    return out;
+  }
   if (format === 'S32_LE') {
     const frames = Math.floor(buf.length / 8);
     const out = Buffer.alloc(frames * 2);
@@ -55,6 +67,7 @@ function stereoToMono(buf, format) {
     }
     return out;
   }
+  if (channels === 1) return buf;
   const frames = Math.floor(buf.length / 4);
   const out = Buffer.alloc(frames * 2);
   for (let i = 0; i < frames; i++) {
@@ -269,15 +282,18 @@ function start() {
 
   // Per-device state: { id, name, format, muted, volume, gain, process, buffer }
   const devices = {};
-  allDevices.forEach(d => {
+  for (const d of allDevices) {
+    const detected = detectFormat(d.id);
     devices[d.id] = {
       id: d.id, name: d.name, shortName: d.shortName,
-      format: detectFormat(d.id),
+      ...detected,
       muted: false, volume: 100, gain: 100,
       process: null, buffer: Buffer.alloc(0),
     };
-    console.log(`[pi] ${d.id} format: ${devices[d.id].format}`);
-  });
+    console.log(`[pi] ${d.id} format: ${detected.format} channels: ${detected.channels}`);
+  }
+  // Wait for any leftover arecord processes from detection to fully exit
+  try { execSync('sleep 1'); } catch (e) {}
 
   const socket = io(STREAM_URL, {
     query: { broadcaster: '1', type: 'pi' },
@@ -388,13 +404,13 @@ function start() {
 
   function startCapture(dev) {
     if (dev.process) return;
-    const args = ['-D', dev.id, '-f', dev.format, '-c', '2', '-r', String(CAPTURE_RATE), '-t', 'raw', '--buffer-size', '1024'];
+    const args = ['-D', dev.id, '-f', dev.format, '-c', String(dev.channels), '-r', String(CAPTURE_RATE), '-t', 'raw', '--buffer-size', '1024'];
     console.log(`[pi] arecord ${dev.shortName}: ${args.join(' ')}`);
     dev.process = spawn('arecord', args);
 
     dev.process.stdout.on('data', (chunk) => {
       if (!authenticated) return;
-      const mono = downsample(stereoToMono(chunk, dev.format), CAPTURE_RATE, TARGET_RATE);
+      const mono = downsample(toMono16(chunk, dev.format, dev.channels), CAPTURE_RATE, TARGET_RATE);
       dev.buffer = Buffer.concat([dev.buffer, mono]);
       // Prevent buffer from growing too large (max ~1 second of audio)
       if (dev.buffer.length > TARGET_RATE * 2) {
