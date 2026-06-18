@@ -394,8 +394,35 @@ function start() {
     if (cb) cb(result);
   });
 
+  function scanForNewDevices() {
+    const current = findAllUSBDevices();
+    for (const d of current) {
+      if (!devices[d.id]) {
+        console.log(`[pi] New device detected: ${d.id} - ${d.name}`);
+        const detected = detectFormat(d.id);
+        devices[d.id] = {
+          id: d.id, captureId: detected.deviceId, name: d.name, shortName: d.shortName,
+          format: detected.format, channels: detected.channels,
+          muted: false, volume: 100, gain: 100,
+          process: null, buffer: Buffer.alloc(0),
+        };
+        console.log(`[pi] ${d.id} -> ${detected.deviceId} format: ${detected.format} channels: ${detected.channels}`);
+        if (authenticated) startCapture(devices[d.id]);
+      }
+    }
+    const currentIds = new Set(current.map(d => d.id));
+    for (const id of Object.keys(devices)) {
+      if (!currentIds.has(id)) {
+        console.log(`[pi] Device removed: ${id} - ${devices[id].name}`);
+        if (devices[id].process) { devices[id].process.kill('SIGTERM'); }
+        delete devices[id];
+      }
+    }
+  }
+
   function startStatus() {
     const send = () => {
+      scanForNewDevices();
       const deviceList = Object.values(devices).map(d => ({
         id: d.id, name: d.name, shortName: d.shortName,
         muted: d.muted, volume: d.volume, gain: d.gain,
@@ -407,7 +434,7 @@ function start() {
       });
     };
     send();
-    statusInterval = setInterval(send, 5000);
+    statusInterval = setInterval(send, 10000);
   }
 
   function stopStatus() {
