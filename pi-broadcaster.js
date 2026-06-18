@@ -34,23 +34,28 @@ function findAllUSBDevices() {
 }
 
 function detectFormat(deviceId) {
-  // Try S16_LE stereo first
   for (const fmt of ['S16_LE', 'S32_LE']) {
     for (const ch of [2, 1]) {
       try {
-        execSync(`timeout 2 arecord -D ${deviceId} -f ${fmt} -c ${ch} -r 48000 -d 1 -t raw /dev/null 2>&1`, { encoding: 'utf8', timeout: 5000 });
-        console.log(`[detect] ${deviceId}: ${fmt} ${ch}ch OK`);
-        return { format: fmt, channels: ch };
-      } catch (e) {
-        const msg = (e.stderr || '') + (e.stdout || '') + (e.message || '');
-        if (msg.includes('Recording raw data') || msg.includes('stdin')) {
-          console.log(`[detect] ${deviceId}: ${fmt} ${ch}ch OK (from stderr)`);
+        const out = execSync(`arecord -D ${deviceId} -f ${fmt} -c ${ch} -r 48000 -d 1 -t raw /dev/null 2>&1 || true`, { encoding: 'utf8', timeout: 5000 });
+        if (out.includes('Recording raw data') || out.includes('Signed')) {
+          console.log(`[detect] ${deviceId}: ${fmt} ${ch}ch OK`);
+          try { execSync(`pkill -f "arecord -D ${deviceId}" 2>/dev/null || true`, { timeout: 2000 }); } catch (e) {}
           return { format: fmt, channels: ch };
         }
+        console.log(`[detect] ${deviceId}: ${fmt} ${ch}ch failed: ${out.trim().split('\n').pop()}`);
+      } catch (e) {
+        const msg = (e.stderr || '') + (e.stdout || '') + (e.message || '');
+        if (msg.includes('Recording raw data') || msg.includes('Signed')) {
+          console.log(`[detect] ${deviceId}: ${fmt} ${ch}ch OK (from catch)`);
+          try { execSync(`pkill -f "arecord -D ${deviceId}" 2>/dev/null || true`, { timeout: 2000 }); } catch (e2) {}
+          return { format: fmt, channels: ch };
+        }
+        console.log(`[detect] ${deviceId}: ${fmt} ${ch}ch error: ${msg.trim().split('\n').pop()}`);
       }
     }
   }
-  console.log(`[detect] ${deviceId}: falling back to S32_LE 2ch`);
+  console.log(`[detect] ${deviceId}: all combos failed, falling back to S32_LE 2ch`);
   return { format: 'S32_LE', channels: 2 };
 }
 
