@@ -29,11 +29,12 @@ function findUSBDevice() {
 }
 
 function stereoToMono(buf) {
-  const frames = Math.floor(buf.length / 4);
+  // S32_LE stereo: 8 bytes per frame (4 bytes per sample × 2 channels)
+  const frames = Math.floor(buf.length / 8);
   const out = Buffer.alloc(frames * 2);
   for (let i = 0; i < frames; i++) {
-    const l = buf.readInt16LE(i * 4);
-    const r = buf.readInt16LE(i * 4 + 2);
+    const l = buf.readInt32LE(i * 8) >> 16;
+    const r = buf.readInt32LE(i * 8 + 4) >> 16;
     out.writeInt16LE(Math.max(-32768, Math.min(32767, Math.round((l + r) / 2))), i * 2);
   }
   return out;
@@ -320,7 +321,7 @@ function start() {
 
   function startCapture() {
     if (arecord) return;
-    const args = ['-D', device, '-f', 'S16_LE', '-c', '2', '-r', String(CAPTURE_RATE), '-t', 'raw', '--buffer-size', '1024'];
+    const args = ['-D', device, '-f', 'S32_LE', '-c', '2', '-r', String(CAPTURE_RATE), '-t', 'raw', '--buffer-size', '1024'];
     console.log(`[pi] arecord ${args.join(' ')}`);
     arecord = spawn('arecord', args);
 
