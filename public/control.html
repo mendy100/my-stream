@@ -924,6 +924,7 @@
   const devicesList = document.getElementById('devices-list');
   const devicesRefresh = document.getElementById('devices-refresh');
   let knownDevices = [];
+  let deviceActionTime = 0;
 
   function renderDevices(devices) {
     knownDevices = devices || [];
@@ -961,6 +962,7 @@
       const gainVal = document.getElementById('gain-val-' + mid);
 
       muteBtn.addEventListener('click', async () => {
+        deviceActionTime = Date.now();
         const muted = !muteBtn.classList.contains('muted');
         muteBtn.classList.toggle('muted', muted);
         muteBtn.textContent = muted ? 'Muted' : 'On';
@@ -972,6 +974,7 @@
 
       let volTimeout;
       volSlider.addEventListener('input', () => {
+        deviceActionTime = Date.now();
         volVal.textContent = volSlider.value;
         clearTimeout(volTimeout);
         volTimeout = setTimeout(() => {
@@ -984,6 +987,7 @@
 
       let gainTimeout;
       gainSlider.addEventListener('input', () => {
+        deviceActionTime = Date.now();
         gainVal.textContent = gainSlider.value;
         clearTimeout(gainTimeout);
         gainTimeout = setTimeout(() => {
@@ -1005,9 +1009,9 @@
 
   devicesRefresh.addEventListener('click', loadDevices);
 
-  // Update devices from pi-status
+  // Update devices from pi-status (skip if user acted recently)
   socket.on('pi-status', (info) => {
-    if (info && info.devices) renderDevices(info.devices);
+    if (info && info.devices && Date.now() - deviceActionTime > 3000) renderDevices(info.devices);
   });
 
   setTimeout(loadDevices, 1500);
